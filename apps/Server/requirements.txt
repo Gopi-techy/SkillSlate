@@ -1,0 +1,9 @@
+flask==2.3.3
+flask-cors==4.0.0
+flask-bcrypt==1.0.1
+pymongo==4.5.0
+pyjwt==2.8.0
+python-dotenv==1.0.0
+gunicorn==21.2.0
+watchdog==3.0.0
+requests==2.32.3

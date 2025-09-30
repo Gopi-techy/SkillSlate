@@ -1,0 +1,50 @@
+# General
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+
+# Node / JS
+node_modules/
+dist/
+build/
+.parcel-cache/
+.vite/
+*.cache/
+
+# Coverage / Reports
+coverage/
+*.lcov
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Project specific
+apps/Server/venv/
+apps/Client-JS/node_modules/
+apps/Client-JS/dist/
+apps/frontend/node_modules/
+apps/frontend/dist/
+packages/**/node_modules/
+packages/**/dist/
+infra/**/node_modules/
+infra/**/dist/
+
+# Assets / output
+packages/Server/output/
+**/output/
+
