@@ -1,1 +1,0 @@
-# SkillSlate Backend Package
