@@ -38,4 +38,9 @@ class GitHubTokenStore:
             'login': doc.get('login')
         }
 
+    @staticmethod
+    def delete_for_user(user_id: str):
+        """Delete a user's GitHub token."""
+        col = GitHubTokenStore.collection()
+        return col.delete_one({ 'userId': ObjectId(user_id) })
 

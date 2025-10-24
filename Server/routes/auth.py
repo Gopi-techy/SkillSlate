@@ -3,6 +3,7 @@ from flask_bcrypt import Bcrypt
 import jwt
 from datetime import datetime, timedelta
 import os
+import requests
 from functools import wraps
 from models.user import User
 
@@ -163,3 +164,67 @@ def verify_token(current_user):
         'message': 'Token is valid',
         'user': user_data
     }), 200
+
+@auth_bp.route('/github/login', methods=['POST'])
+def github_login():
+    """Login or register with GitHub access token"""
+    try:
+        data = request.get_json()
+        access_token = data.get('access_token')
+        
+        if not access_token:
+            return jsonify({'message': 'GitHub access token is required'}), 400
+            
+        # Get GitHub user info
+        headers = {
+            'Authorization': f'Bearer {access_token}',
+            'Accept': 'application/vnd.github+json'
+        }
+        response = requests.get('https://api.github.com/user', headers=headers)
+        if not response.ok:
+            return jsonify({'message': 'Failed to get GitHub user info'}), 400
+            
+        github_user = response.json()
+        
+        # Get GitHub user email
+        emails_response = requests.get('https://api.github.com/user/emails', headers=headers)
+        if not emails_response.ok:
+            return jsonify({'message': 'Failed to get GitHub user emails'}), 400
+            
+        github_emails = emails_response.json()
+        primary_email = next((email['email'] for email in github_emails if email['primary']), None)
+        if not primary_email:
+            return jsonify({'message': 'No primary email found in GitHub account'}), 400
+            
+        # Find or create user
+        user_doc = User.find_by_email(primary_email)
+        if user_doc:
+            # Update existing user
+            User.update_github_connection(user_doc['_id'], True)
+        else:
+            # Create new user
+            user_doc = User(
+                name=github_user['name'] or github_user['login'],
+                email=primary_email,
+                password=bcrypt.generate_password_hash(os.urandom(32).hex()).decode('utf-8'),
+                github_connected=True
+            )
+            user_doc.save()
+            
+        # Generate JWT token
+        token = generate_token(user_doc['_id'])
+        
+        # Update last login time
+        User.update_last_login(user_doc['_id'])
+        
+        # Return user data
+        user_data = User.to_dict(user_doc)
+        user_data['token'] = token
+        
+        return jsonify({
+            'message': 'GitHub login successful',
+            'user': user_data
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'message': f'GitHub login failed: {str(e)}'}), 500

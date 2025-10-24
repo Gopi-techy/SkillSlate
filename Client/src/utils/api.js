@@ -40,13 +40,15 @@ class ApiService {
             const data = await response.json();
 
             if (!response.ok) {
-                throw new Error(data.message || `HTTP error! status: ${response.status}`);
+                const error = new Error(data.message || `HTTP error! status: ${response.status}`);
+                error.status = response.status;
+                error.data = data;
+                throw error;
             }
 
             return data;
         } catch (error) {
-            console.error(`API Error (${endpoint}):`, error);
-            throw error;
+            return this.handleApiError(error, endpoint);
         }
     }
 
@@ -59,6 +61,16 @@ class ApiService {
     }
 
     async login(credentials) {
+        // Support both email/password and GitHub OAuth login
+        if (credentials.provider === 'github') {
+            return this.request('/auth/github/login', {
+                method: 'POST',
+                body: JSON.stringify({
+                    access_token: credentials.access_token
+                }),
+            });
+        }
+        
         return this.request('/auth/login', {
             method: 'POST',
             body: JSON.stringify(credentials),
@@ -97,6 +109,65 @@ class ApiService {
     // Health check
     async healthCheck() {
         return this.request('/health');
+    }
+
+    // Utility method to handle common API errors
+    handleApiError(error, endpoint) {
+        console.error(`API Error (${endpoint}):`, error);
+        if (error.status === 401) {
+            // Token expired or invalid, clear auth
+            auth.clear();
+            this.setToken(null);
+            window.location.reload();
+        }
+        throw error;
+    }
+
+    // GitHub OAuth Endpoints
+    async getGithubAuthUrl(state) {
+        try {
+            const response = await this.request('/github/authorize?' + new URLSearchParams({ state }).toString(), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+            
+            if (!response || !response.url) {
+                throw new Error('Invalid response from server: Missing authorization URL');
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('Failed to get GitHub authorization URL:', error);
+            throw new Error('Could not initialize GitHub authentication. Please try again.');
+        }
+    }
+
+    async exchangeGithubCode(code, state) {
+        try {
+            return await this.request('/github/callback', {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    code,
+                    state 
+                })
+            });
+        } catch (error) {
+            console.error('Failed to exchange GitHub code:', error);
+            throw new Error('Failed to complete GitHub authentication. Please try again.');
+        }
+    }
+
+    async linkGithub(token) {
+        return this.request('/github/link', {
+            method: 'POST',
+            body: JSON.stringify({ access_token: token })
+        });
+    }
+
+    async getGithubStatus() {
+        return this.request('/github/me');
     }
 }
 

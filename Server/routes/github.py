@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, redirect
 import os
 import requests
 from functools import wraps
@@ -11,36 +11,109 @@ github_bp = Blueprint('github', __name__, url_prefix='/api/github')
 
 
 def get_github_oauth_config():
-    return {
-        'client_id': os.environ.get('GITHUB_CLIENT_ID', ''),
-        'client_secret': os.environ.get('GITHUB_CLIENT_SECRET', ''),
-        'redirect_uri': os.environ.get('GITHUB_REDIRECT_URI', 'http://localhost:5000/api/github/callback'),
-        'scopes': os.environ.get('GITHUB_SCOPES', 'repo,workflow,pages:write')
+    client_id = os.getenv('GITHUB_CLIENT_ID')
+    client_secret = os.getenv('GITHUB_CLIENT_SECRET')
+    
+    if not client_id or not client_secret:
+        print("WARNING: GitHub OAuth credentials are missing!")
+        print(f"GITHUB_CLIENT_ID: {'Present' if client_id else 'Missing'}")
+        print(f"GITHUB_CLIENT_SECRET: {'Present' if client_secret else 'Missing'}")
+        
+    config = {
+        'client_id': client_id or '',
+        'client_secret': client_secret or '',
+        'redirect_uri': os.getenv('GITHUB_REDIRECT_URI', 'http://localhost:5000/api/github/callback'),
+        'scopes': os.getenv('GITHUB_SCOPES', 'repo,workflow,pages:write')
     }
+    
+    # Debug print
+    print("GitHub OAuth Config:", {k: v if k != 'client_secret' else '***' for k, v in config.items()})
+    return config
 
 
 @github_bp.route('/authorize', methods=['GET'])
 def authorize():
     cfg = get_github_oauth_config()
     state = request.args.get('state')
-    authorize_url = (
-        'https://github.com/login/oauth/authorize'
-        f"?client_id={cfg['client_id']}"
-        f"&redirect_uri={cfg['redirect_uri']}"
-        f"&scope={cfg['scopes']}"
-        f"&state={state or ''}"
-        '&allow_signup=true'
-    )
-    return jsonify({'url': authorize_url})
+    
+    if not cfg['client_id']:
+        print("❌ GitHub client ID is missing!")
+        return jsonify({
+            'error': 'configuration_error',
+            'error_description': 'GitHub OAuth is not properly configured'
+        }), 500
+    
+    if not state:
+        print("❌ No state parameter provided!")
+        return jsonify({
+            'error': 'invalid_request',
+            'error_description': 'State parameter is required'
+        }), 400
+    
+    try:
+        # URL encode the redirect URI and scopes
+        redirect_uri = requests.utils.quote(cfg['redirect_uri'])
+        scopes = requests.utils.quote(cfg['scopes'])
+        
+        authorize_url = (
+            'https://github.com/login/oauth/authorize'
+            f"?client_id={cfg['client_id']}"
+            f"&redirect_uri={redirect_uri}"
+            f"&scope={scopes}"
+            f"&state={state}"
+            '&allow_signup=true'
+        )
+        
+        print(f"✅ Generated GitHub authorization URL (state: {state})")
+        return jsonify({'url': authorize_url})
+        
+    except Exception as e:
+        print(f"❌ Error generating authorization URL: {str(e)}")
+        return jsonify({
+            'error': 'server_error',
+            'error_description': 'Failed to generate authorization URL'
+        }), 500
 
 
-@github_bp.route('/callback', methods=['GET'])
+@github_bp.route('/callback', methods=['GET', 'POST'])
 def callback():
-    code = request.args.get('code')
-    state = request.args.get('state')
-    if not code:
-        return jsonify({'message': 'Missing code'}), 400
+    print("GitHub Callback received!")
+    
+    # Handle both GET (GitHub redirect) and POST (frontend code exchange) requests
+    if request.method == 'GET':
+        print("Query params:", dict(request.args))
+        code = request.args.get('code')
+        state = request.args.get('state')
+        error = request.args.get('error')
+        error_description = request.args.get('error_description')
+    else:  # POST
+        print("Processing code exchange from frontend")
+        data = request.get_json(silent=True) or {}
+        code = data.get('code')
+        state = data.get('state')
+        error = data.get('error')
+        error_description = data.get('error_description')
 
+    # Handle GitHub error response first
+    if error:
+        print(f"GitHub Error: {error} - {error_description}")
+        error_params = {
+            'error': error,
+            'error_description': error_description or 'GitHub authentication failed'
+        }
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+        return redirect(f"{frontend_url}/github-callback?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items()))
+
+    if not code:
+        print("Error: No code in callback")
+        error_params = {
+            'error': 'missing_code',
+            'error_description': 'No authorization code received from GitHub'
+        }
+        frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+        return redirect(f"{frontend_url}/github-callback?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items()))
+
+    # Exchange code for token
     cfg = get_github_oauth_config()
     token_url = 'https://github.com/login/oauth/access_token'
     headers = {'Accept': 'application/json'}
@@ -52,17 +125,94 @@ def callback():
     }
 
     try:
+        print("🔄 Exchanging code for token...")
         res = requests.post(token_url, headers=headers, json=payload, timeout=15)
-        res.raise_for_status()
-        data = res.json()
+        
+        # Check for HTTP error first
+        try:
+            res.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            print(f"❌ HTTP error in token exchange: {str(e)}")
+            error_params = {
+                'error': 'token_exchange_failed',
+                'error_description': f'GitHub API error: {str(e)}'
+            }
+            # For GET requests, redirect to frontend
+            if request.method == 'GET':
+                frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+                return redirect(f"{frontend_url}/github-callback?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items()))
+            # For POST requests, return JSON response
+            return jsonify(error_params), 400
+            
+        # Try to parse JSON response
+        try:
+            data = res.json()
+        except ValueError:
+            print("❌ Invalid JSON response from GitHub")
+            error_params = {
+                'error': 'invalid_response',
+                'error_description': 'Invalid response from GitHub API'
+            }
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+            return redirect(f"{frontend_url}/github-callback?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items()))
+            
+        print("📦 Token response:", {k: '***' if k == 'access_token' else v for k, v in data.items()})
+        
         access_token = data.get('access_token')
         token_type = data.get('token_type', 'bearer')
+        
         if not access_token:
-            return jsonify({'message': 'Failed to exchange code for token', 'details': data}), 400
-        # Echo state back for client-side validation/binding to the session
-        return jsonify({'message': 'GitHub token issued', 'token_type': token_type, 'access_token': access_token, 'state': state})
+            print("❌ No access token in response")
+            error_params = {
+                'error': 'token_exchange_failed',
+                'error_description': 'Failed to exchange code for access token'
+            }
+            if 'error' in data:
+                error_params['github_error'] = data['error']
+                error_params['github_error_description'] = data.get('error_description', '')
+            
+            # For GET requests, redirect to frontend
+            if request.method == 'GET':
+                frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+                return redirect(f"{frontend_url}/github-callback?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items()))
+            # For POST requests, return JSON response
+            return jsonify(error_params), 400
+        
+        # For GET requests, redirect back to frontend with the token
+        if request.method == 'GET':
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+            params = {
+                'code': code,
+                'state': state,
+                'access_token': access_token,
+                'token_type': token_type
+            }
+        
+            print("✅ Redirecting to frontend with token")
+            # URL encode each parameter value
+            encoded_params = {k: requests.utils.quote(str(v)) for k, v in params.items() if v is not None}
+            redirect_url = f"{frontend_url}/github-callback?" + "&".join(f"{k}={v}" for k, v in encoded_params.items())
+            return redirect(redirect_url)
+        
+        # For POST requests, return JSON response with token
+        return jsonify({
+            'access_token': access_token,
+            'token_type': token_type,
+            'state': state
+        }), 200
+        
     except requests.RequestException as e:
-        return jsonify({'message': f'GitHub token exchange failed: {str(e)}'}), 500
+        print("❌ Token exchange failed:", str(e))
+        error_params = {
+            'error': 'request_failed',
+            'error_description': f'Failed to exchange code: {str(e)}'
+        }
+        # For GET requests, redirect to frontend
+        if request.method == 'GET':
+            frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+            return redirect(f"{frontend_url}/github-callback?" + "&".join(f"{k}={requests.utils.quote(str(v))}" for k, v in error_params.items()))
+        # For POST requests, return JSON response
+        return jsonify(error_params), 500
 
 
 def github_headers(token: str):
@@ -77,12 +227,17 @@ def github_headers(token: str):
 def github_me(current_user):
     token_doc = GitHubTokenStore.get_for_user(str(current_user['_id']))
     if not token_doc:
-        return jsonify({'message': 'GitHub not linked'}), 400
+        return jsonify({'message': 'GitHub not linked'}), 404  # Return 404 if no GitHub token exists
     token = token_doc['access_token']
     try:
         res = requests.get('https://api.github.com/user', headers=github_headers(token), timeout=15)
+        if res.status_code == 401:  # Token invalid/expired
+            # Clean up invalid token
+            GitHubTokenStore.delete_for_user(str(current_user['_id']))
+            User.update_github_connection(current_user['_id'], False)
+            return jsonify({'message': 'GitHub token invalid/expired'}), 401
         res.raise_for_status()
-        return jsonify(res.json()), 200
+        return jsonify({'message': 'GitHub connected', 'data': res.json()}), 200
     except requests.RequestException as e:
         return jsonify({'message': f'Fetch GitHub user failed: {str(e)}'}), 500
 

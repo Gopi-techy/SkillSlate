@@ -8,6 +8,43 @@ export class Header {
     this.onAuth = onAuth;
     this.onNavigate = onNavigate;
     this.isMenuOpen = false;
+    this.checkGithubStatus();
+  }
+
+  async checkGithubStatus() {
+    if (this.user) {
+      try {
+        const response = await apiService.getGithubStatus();
+        // Only set githubData if we got a successful response
+        if (response && response.data) {
+          this.user.githubData = response.data;
+          // Force re-render of the header
+          this.updateGithubStatus(response.data);
+        } else {
+          // Clear GitHub data if not connected
+          this.user.githubData = null;
+          this.updateGithubStatus(null);
+        }
+      } catch (error) {
+        console.warn('Failed to fetch GitHub status:', error);
+        // Clear GitHub data on error
+        this.user.githubData = null;
+        this.updateGithubStatus(null);
+      }
+    }
+  }
+
+  updateGithubStatus(githubData) {
+    const userMenuButton = document.getElementById('user-menu-button');
+    const githubStatusIndicator = document.getElementById('github-status-indicator');
+    
+    if (userMenuButton && !githubStatusIndicator) {
+      const indicator = document.createElement('span');
+      indicator.id = 'github-status-indicator';
+      indicator.className = githubData ? 'text-green-500 ml-2' : 'text-gray-500 ml-2';
+      indicator.innerHTML = createIcon('Github', 'w-4 h-4');
+      userMenuButton.appendChild(indicator);
+    }
   }
 
   render() {
@@ -63,7 +100,10 @@ export class Header {
           class="flex items-center space-x-2 text-gray-300 hover:text-white transition-colors"
         >
           ${createIcon('User', 'w-4 h-4')}
-          <span>${this.user.email}</span>
+          <span>${this.user.name || this.user.email}</span>
+          <span id="github-status-indicator" class="${this.user.githubData ? 'text-green-500' : 'text-gray-500'} ml-2">
+            ${createIcon('Github', 'w-4 h-4')}
+          </span>
           ${createIcon('ChevronDown', 'w-4 h-4')}
         </button>
         <div 
@@ -71,6 +111,13 @@ export class Header {
           class="dropdown-menu right-0 mt-2 w-48 glass-card opacity-0 invisible transition-all duration-200 border border-gray-600/50 shadow-xl"
         >
           <div class="py-1">
+            <button 
+              id="github-connect-btn"
+              class="flex items-center space-x-2 w-full px-4 py-2 text-sm ${this.user.githubData ? 'text-green-500' : 'text-gray-300'} hover:bg-gray-800/50 hover:text-white transition-colors"
+            >
+              ${createIcon('Github', 'w-4 h-4')}
+              <span>${this.user.githubData ? 'GitHub Connected' : 'Connect GitHub'}</span>
+            </button>
             <button 
               id="settings-btn"
               class="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
@@ -296,6 +343,26 @@ export class Header {
     if (settingsBtn) {
       settingsBtn.addEventListener('click', this.settingsHandler);
     }
+
+    // GitHub connect button
+    const githubConnectBtn = document.getElementById('github-connect-btn');
+    this.githubConnectHandler = async () => {
+      try {
+        const response = await apiService.getGithubAuthUrl('connect');
+        if (response.url) {
+          // Store that this is a connection attempt, not a login
+          localStorage.setItem('github_action', 'connect');
+          window.location.href = response.url;
+        }
+      } catch (error) {
+        console.error('Failed to start GitHub connection:', error);
+        alert('Failed to connect to GitHub. Please try again.');
+      }
+    };
+
+    if (githubConnectBtn) {
+      githubConnectBtn.addEventListener('click', this.githubConnectHandler);
+    }
   }
 
   removeEventListeners() {
@@ -327,6 +394,7 @@ export class Header {
     const signOutBtn = document.getElementById('sign-out');
     const mobileSignOutBtn = document.getElementById('mobile-sign-out');
     const settingsBtn = document.getElementById('settings-btn');
+    const githubConnectBtn = document.getElementById('github-connect-btn');
     
     if (signOutBtn && this.signOutHandler) {
       signOutBtn.removeEventListener('click', this.signOutHandler);
@@ -336,6 +404,9 @@ export class Header {
     }
     if (settingsBtn && this.settingsHandler) {
       settingsBtn.removeEventListener('click', this.settingsHandler);
+    }
+    if (githubConnectBtn && this.githubConnectHandler) {
+      githubConnectBtn.removeEventListener('click', this.githubConnectHandler);
     }
   }
 }

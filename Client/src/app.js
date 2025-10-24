@@ -9,6 +9,7 @@ export class SkillSlateApp {
     this.user = null;
     this.appContainer = document.getElementById('app');
     this.router = null;
+    this.apiService = apiService;  // Make apiService available to route handlers
   }
 
   async init() {
@@ -23,8 +24,20 @@ export class SkillSlateApp {
     // Setup routes BEFORE router initialization
     setupRoutes(this);
     
-    // Now initialize router (this will trigger initial navigation)
-    this.router.init();
+    // Check if we're handling a GitHub callback
+    const isGitHubCallback = window.location.pathname.includes('github-callback');
+    
+    if (!isGitHubCallback) {
+        // Normal initialization - proceed as usual
+        this.router.init();
+    } else {
+        // For GitHub callback, wait a moment to ensure URL params are available
+        console.log('🔄 Detected GitHub callback, delaying initialization...');
+        setTimeout(() => {
+            console.log('🔄 Initializing router for GitHub callback...');
+            this.router.init();
+        }, 100);
+    }
     
     // Add debug functions
     this.addDebugFunctions();
@@ -59,10 +72,17 @@ export class SkillSlateApp {
     this.user = user;
     
     if (user) {
-      const token = user.token;
-      auth.setSession(user, token);
-      apiService.setToken(token);
-      console.log('✅ User session established:', user.email);
+      // Preserve existing token if new user object doesn't have one
+      const token = user.token || auth.getToken();
+      if (token) {
+        // Update user object with token if it's missing
+        user.token = token;
+        auth.setSession(user, token);
+        apiService.setToken(token);
+        console.log('✅ User session established:', user.email);
+      } else {
+        console.error('❌ No token available for user session');
+      }
     } else {
       this.clearAuth();
     }

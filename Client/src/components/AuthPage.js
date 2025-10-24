@@ -274,18 +274,31 @@ export class AuthPage {
     }
   }
 
-  handleGitHubAuth() {
-    // Mock GitHub OAuth
-    const user = {
-      id: '1',
-      email: 'john.doe@github.com',
-      name: 'John Doe',
-      githubConnected: true,
-      token: 'mock-github-token-' + Date.now() // Add mock token
-    };
+  async handleGitHubAuth() {
+    try {
+      // Generate a random state value for security
+      const state = Math.random().toString(36).substring(2, 15);
+      const action = this.mode === 'login' ? 'github_login' : 'github_signup';
+      
+      // Store the state and action
+      localStorage.setItem('github_state', state);
+      localStorage.setItem('github_action', action);
+      
+      // Get GitHub OAuth URL from backend
+      const response = await apiService.getGithubAuthUrl(state);
+      
+      if (!response || !response.url) {
+        throw new Error('Invalid response from server: No authorization URL');
+      }
 
-    console.log('✅ GitHub auth successful:', user.email);
-    this.onAuth(user);
+      console.log('🔄 Initiating GitHub auth, state:', state);
+      
+      // Redirect to GitHub
+      window.location.href = response.url;
+    } catch (error) {
+      console.error('❌ GitHub auth error:', error);
+      this.showError(error.message || 'Failed to initiate GitHub authentication');
+    }
   }
 
   togglePasswordVisibility() {

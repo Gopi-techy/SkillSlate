@@ -1,10 +1,24 @@
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 from datetime import datetime
 import os
+from dotenv import load_dotenv
 from config.database import db_instance
 from routes.auth import auth_bp
 from routes.github import github_bp
+
+# Load environment variables from .env file
+from pathlib import Path
+env_path = Path(__file__).resolve().parent / '.env'
+print(f"Looking for .env file at: {env_path}")
+load_dotenv(dotenv_path=env_path, verbose=True)
+
+# Debug: Print environment variables
+print("Environment variables loaded:")
+print(f"GITHUB_CLIENT_ID: {'Set' if os.getenv('GITHUB_CLIENT_ID') else 'Not set'}")
+print(f"GITHUB_CLIENT_SECRET: {'Set' if os.getenv('GITHUB_CLIENT_SECRET') else 'Not set'}")
+print(f"GITHUB_REDIRECT_URI: {os.getenv('GITHUB_REDIRECT_URI')}")
+print(f"GITHUB_SCOPES: {os.getenv('GITHUB_SCOPES')}")
 
 def create_app():
     """Create and configure the Flask application"""
@@ -12,19 +26,24 @@ def create_app():
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
     
     # Initialize CORS with more permissive settings for development
-    CORS(app, 
-         origins=['http://localhost:3000', 'http://localhost:3001', 'http://localhost:5173', 'http://127.0.0.1:3001'],
-         methods=['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-         allow_headers=['Content-Type', 'Authorization', 'Accept'],
-         supports_credentials=True)
+    frontend_url = os.getenv('FRONTEND_URL', 'http://localhost:3001')
+    allowed_origins = [
+        frontend_url,
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:5173',
+        'http://127.0.0.1:3001'
+    ]
     
-    # Additional CORS headers for preflight requests
-    @app.after_request
-    def after_request(response):
-        response.headers.add('Access-Control-Allow-Origin', '*')
-        response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
-        response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,OPTIONS')
-        return response
+    CORS(app, 
+         resources={
+             r"/api/*": {
+                 "origins": allowed_origins,
+                 "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+                 "allow_headers": ["Content-Type", "Authorization", "Accept"],
+                 "supports_credentials": True
+             }
+         })
     
     # Register blueprints
     app.register_blueprint(auth_bp)

@@ -49,15 +49,49 @@ export class Router {
             console.log(`✅ Route found: ${cleanPath}`);
             try {
                 const content = handler();
-                if (content && typeof content === 'string' && content.trim()) {
-                    this.app.renderPage(content);
+                
+                // Handle both async and sync route handlers
+                if (content instanceof Promise) {
+                    content
+                        .then(asyncContent => {
+                            if (asyncContent && typeof asyncContent === 'string' && asyncContent.trim()) {
+                                this.app.renderPage(asyncContent);
+                            } else {
+                                console.error(`Async route handler for ${cleanPath} returned invalid content:`, asyncContent);
+                                this.handleRouteError();
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Async route handler error:', error);
+                            this.handleRouteError();
+                        })
+                        .finally(() => {
+                            this.isNavigating = false;
+                        });
+                    
+                    // Return loading state for async routes
+                    const loadingContent = `
+                        <div class="min-h-screen flex items-center justify-center">
+                            <div class="text-center">
+                                <h2 class="text-2xl font-semibold text-white mb-4">Loading...</h2>
+                                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto"></div>
+                            </div>
+                        </div>
+                    `;
+                    this.app.renderPage(loadingContent);
+                    return loadingContent;
                 } else {
-                    console.error(`Route handler for ${cleanPath} returned invalid content:`, content);
+                    // Handle synchronous content
+                    if (content && typeof content === 'string' && content.trim()) {
+                        this.app.renderPage(content);
+                    } else {
+                        console.error(`Route handler for ${cleanPath} returned invalid content:`, content);
+                        this.isNavigating = false;
+                        return this.handleRouteError();
+                    }
                     this.isNavigating = false;
-                    return this.handleRouteError();
+                    return content;
                 }
-                this.isNavigating = false;
-                return content;
             } catch (error) {
                 console.error('Route handler error:', error);
                 this.isNavigating = false;
@@ -82,7 +116,9 @@ export class Router {
 
     // Update browser URL
     updateURL(path) {
-        const url = path === 'landing' ? '/' : `/${path}`;
+        // Preserve query parameters when updating URL
+        const currentSearch = window.location.search;
+        const url = path === 'landing' ? '/' : `/${path}${currentSearch}`;
         window.history.pushState({ path }, '', url);
     }
 
