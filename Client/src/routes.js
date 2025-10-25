@@ -159,214 +159,133 @@ export function setupRoutes(app) {
     router.addRoute('github-callback', async () => {
         console.log('🔄 Processing GitHub callback');
         
-        // Initial loading state
+        // Check if this is a page reload after successful auth (no stored state but has callback params)
+        const urlParams = new URLSearchParams(window.location.search);
+        const access_token = urlParams.get('access_token');
+        const storedState = localStorage.getItem('github_state');
+        
+        if (!storedState && access_token) {
+            console.log('⏭️ Detected page reload after auth, redirecting to dashboard');
+            // Clean URL and redirect to dashboard
+            window.history.replaceState({}, document.title, '/dashboard');
+            router.navigate('dashboard');
+            return `<div class="min-h-screen flex items-center justify-center">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+            </div>`;
+        }
+        
+        // Initial loading state with GitHub icon
         const content = `
             <div class="min-h-screen flex items-center justify-center">
                 <div class="text-center max-w-lg">
-                    <h2 class="text-2xl font-semibold text-white mb-4">Completing GitHub Authentication</h2>
-                    <p class="text-gray-300">Please wait while we securely link your GitHub account.</p>
-                    <div class="mt-6 flex items-center justify-center space-x-4">
-                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
-                        <span class="text-cyan-400 font-medium">Linking GitHub Account...</span>
+                    <div class="mb-8">
+                        <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-cyan-500/20 to-blue-600/20 border-2 border-cyan-500/30 mb-6">
+                            <svg class="w-10 h-10 text-cyan-400" fill="currentColor" viewBox="0 0 24 24">
+                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <h2 class="text-2xl font-semibold text-white mb-2">Completing GitHub Authentication</h2>
+                    <p class="text-gray-400 text-sm mb-8">Securely linking your account...</p>
+                    <div class="flex items-center justify-center">
+                        <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-cyan-500"></div>
                     </div>
                 </div>
             </div>
         `;
         
         document.getElementById('app').innerHTML = content;
-        
-        // Create a container for status updates
-        const statusContainer = document.createElement('div');
-        statusContainer.className = 'fixed bottom-4 left-1/2 transform -translate-x-1/2 p-4 rounded-lg shadow-lg z-50 transition-all duration-300';
-        document.body.appendChild(statusContainer);
-        
-        const updateStatus = (message, type = 'info') => {
-            const bgColor = type === 'error' ? 'bg-red-500/20 border-red-500/50 text-red-300' 
-                         : type === 'success' ? 'bg-green-500/20 border-green-500/50 text-green-300'
-                         : 'bg-cyan-500/20 border-cyan-500/50 text-cyan-300';
-            
-            statusContainer.className = `fixed bottom-4 left-1/2 transform -translate-x-1/2 p-4 rounded-lg shadow-lg z-50 transition-all duration-300 ${bgColor} border backdrop-blur-sm`;
-            statusContainer.innerHTML = `
-                <div class="flex items-center space-x-3 min-w-[300px] max-w-md">
-                    <div class="flex-shrink-0">
-                        <div class="animate-pulse w-2 h-2 rounded-full ${type === 'error' ? 'bg-red-400' : 'bg-cyan-400'}"></div>
-                    </div>
-                    <p class="text-sm">${message}</p>
-                </div>
-            `;
-        };
 
         try {
-            const urlParams = new URLSearchParams(window.location.search);
-            console.log('🔍 GitHub callback URL parameters:', Object.fromEntries(urlParams));
-            
             const code = urlParams.get('code');
             const state = urlParams.get('state');
-            const access_token = urlParams.get('access_token');
             const error = urlParams.get('error');
             const error_description = urlParams.get('error_description');
             const github_error = urlParams.get('github_error');
             const github_error_description = urlParams.get('github_error_description');
             
-            // Handle GitHub errors
-            if (github_error) {
-                throw new Error(`GitHub Error: ${github_error_description || github_error}`);
+            // Handle errors
+            if (github_error) throw new Error(`GitHub Error: ${github_error_description || github_error}`);
+            if (error) throw new Error(`${error}: ${error_description || 'Authentication failed'}`);
+            if (!code && !access_token) throw new Error('No authorization code or access token received');
+            if (!access_token) throw new Error('No access token received from the server');
+            
+            // Validate state parameter if both exist
+            if (state && storedState && state !== storedState) {
+                console.error('❌ State mismatch:', { received: state, stored: storedState });
+                throw new Error('Security verification failed. Please try again.');
             }
             
-            // Handle our backend errors
-            if (error) {
-                throw new Error(`${error}: ${error_description || 'Authentication failed'}`);
-            }
-            
-            // Validate we got either a code or token
-            if (!code && !access_token) {
-                throw new Error('No authorization code or access token received');
-            }
-            
-            // Validate state when present (ONLY if we have code - which means coming directly from GitHub)
-            // If we have access_token, we've been redirected by our backend which already validated state
-            if (code && !access_token) {
-                const storedState = localStorage.getItem('github_state');
-                if (state && (!storedState || state !== storedState)) {
-                    console.error('❌ State mismatch:', { received: state, stored: storedState });
-                    throw new Error('Invalid state parameter - security verification failed');
-                }
-            }
-            
-            updateStatus('Processing GitHub response...');
-            
-            // Get the stored action
+            // Get the stored action and clear data
             const storedAction = localStorage.getItem('github_action');
-            console.log('🔑 GitHub callback action:', storedAction);
-            
-            // Check the URL parameters for the access token from the backend redirect
-            if (!access_token) {
-                console.error('❌ Missing access_token in URL parameters');
-                throw new Error('No access token received from the server. Please try again.');
-            }
-            
-            // Validate state one more time when we have access_token (from backend redirect)
-            if (access_token && state) {
-                const storedState = localStorage.getItem('github_state');
-                if (!storedState || state !== storedState) {
-                    console.error('❌ State mismatch:', { received: state, stored: storedState });
-                    throw new Error('Invalid state parameter - security verification failed');
-                }
-            }
-            
-            // Clear stored state data after validation
             localStorage.removeItem('github_state');
             localStorage.removeItem('github_action');
             
-            console.log('✅ Received access token from server');
-            updateStatus('Access token received successfully');
-            
-            updateStatus('Starting GitHub integration...');
+            console.log('✅ GitHub token received, processing authentication...');
             
             if (storedAction === 'connect') {
-                // This was a connection request from an already logged-in user
-                // The user already has an auth token, just need to link GitHub
+                // Connection from logged-in user
                 await app.apiService.linkGithub(access_token);
-                updateStatus('Updating profile...', 'success');
-                
-                // Update user data
                 const profileResponse = await app.apiService.getProfile();
-                if (profileResponse.user) {
-                    app.handleAuth(profileResponse.user);
-                    updateStatus('GitHub account linked successfully!', 'success');
-                    setTimeout(() => router.navigate('dashboard'), 1000);
-                } else {
-                    throw new Error('Could not update user profile');
-                }
+                if (!profileResponse.user) throw new Error('Could not update user profile');
+                
+                app.handleAuth(profileResponse.user);
+                window.history.replaceState({}, document.title, '/dashboard');
+                setTimeout(() => router.navigate('dashboard'), 500);
             } else {
-                updateStatus('Creating new account with GitHub...');
-                // This was a login/signup with GitHub
-                // First, register/login with GitHub to get our API token
-                console.log('🔄 Sending GitHub login request...');
-                const response = await app.apiService.login({ 
-                    provider: 'github',
-                    access_token: access_token
-                });
+                // New login/signup
+                const response = await app.apiService.login({ provider: 'github', access_token });
+                if (!response?.user?.token) throw new Error('Failed to authenticate with GitHub');
                 
-                console.log('📦 GitHub login response:', response);
-                
-                if (!response || !response.user?.token) {
-                    console.error('❌ Invalid login response:', response);
-                    throw new Error('Failed to authenticate with GitHub token');
-                }
-                
-                // Extract token from the nested response
                 const apiToken = response.user.token;
-                
-                // Set our API token first
                 auth.setSession(response.user, apiToken);
                 app.apiService.setToken(apiToken);
                 
-                // Now we can link the GitHub account
                 await app.apiService.linkGithub(access_token);
                 
-                updateStatus('Getting user profile...', 'success');
-                // Get the latest profile data
                 const profileResponse = await app.apiService.getProfile();
-                if (profileResponse.user) {
-                    app.handleAuth(profileResponse.user);
-                    updateStatus('Successfully logged in with GitHub!', 'success');
-                    setTimeout(() => router.navigate('dashboard'), 1000);
-                } else {
-                    throw new Error('Failed to get user profile');
-                }
+                if (!profileResponse.user) throw new Error('Failed to get user profile');
+                
+                app.handleAuth(profileResponse.user);
+                window.history.replaceState({}, document.title, '/dashboard');
+                setTimeout(() => router.navigate('dashboard'), 500);
             }
+            
+            return content;
+            return content;
+            
         } catch (error) {
             console.error('❌ GitHub callback error:', error);
             
-            // Clear any stored GitHub action
+            // Clear stored data
             localStorage.removeItem('github_action');
+            localStorage.removeItem('github_state');
             
-            // Create an error container with more detailed information
-            const container = document.createElement('div');
-            container.className = 'fixed top-4 right-4 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 max-w-md shadow-lg z-50';
-            
-            let errorMessage = 'Could not complete GitHub authentication.';
-            if (error.message.includes('state parameter')) {
-                errorMessage = 'Security verification failed. Please try the GitHub login again.';
-            } else if (error.message.includes('access token')) {
-                errorMessage = 'Did not receive proper authentication from GitHub. Please try again.';
-            } else if (error.message.includes('profile')) {
-                errorMessage = 'Could not retrieve your GitHub profile. Please ensure you grant the required permissions.';
-            } else if (error.message.includes('GitHub Error:')) {
-                errorMessage = error.message; // Use the GitHub error directly
-            } else if (error.message.includes('token_exchange')) {
-                errorMessage = 'Failed to exchange GitHub token. Please try again or contact support if the problem persists.';
-            }
-            
-            container.innerHTML = `
-                <div class="flex items-start space-x-3">
-                    <div class="flex-shrink-0">
-                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
-                        </svg>
-                    </div>
-                    <div>
-                        <h3 class="text-sm font-medium">GitHub Authentication Failed</h3>
-                        <p class="mt-1 text-xs">${errorMessage}</p>
-                        <p class="mt-2 text-xs opacity-75">Error details: ${error.message}</p>
+            // Show professional error page
+            document.getElementById('app').innerHTML = `
+                <div class="min-h-screen flex items-center justify-center px-4">
+                    <div class="text-center max-w-md">
+                        <div class="mb-6">
+                            <div class="inline-flex items-center justify-center w-20 h-20 rounded-full bg-gradient-to-br from-red-500/20 to-red-600/20 border-2 border-red-500/30">
+                                <svg class="w-10 h-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                        </div>
+                        <h2 class="text-2xl font-semibold text-white mb-3">Authentication Failed</h2>
+                        <p class="text-gray-400 mb-8">${error.message || 'An unexpected error occurred during GitHub authentication.'}</p>
+                        <button 
+                            onclick="window.router.navigate('login')"
+                            class="px-6 py-3 bg-cyan-600 hover:bg-cyan-700 text-white font-medium rounded-lg transition-colors duration-200 shadow-lg hover:shadow-cyan-500/50"
+                        >
+                            Return to Login
+                        </button>
                     </div>
                 </div>
             `;
             
-            document.body.appendChild(container);
-            
-            // Remove the error message after 5 seconds
-            setTimeout(() => {
-                if (container.parentNode) {
-                    container.remove();
-                }
-            }, 5000);
-            
-            router.navigate('login');
+            return content;
         }
-        
-        return null;
     });
     console.log('✅ Added github-callback route');
 
