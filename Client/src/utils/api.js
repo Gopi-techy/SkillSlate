@@ -169,6 +169,45 @@ class ApiService {
     async getGithubStatus() {
         return this.request('/github/me');
     }
+
+    // Portfolio endpoints
+    async getPortfolios() {
+        return this.request('/portfolio/');
+    }
+
+    async createPortfolio(portfolioData) {
+        return this.request('/portfolio/', {
+            method: 'POST',
+            body: JSON.stringify(portfolioData)
+        });
+    }
+
+    async getPortfolio(portfolioId) {
+        return this.request(`/portfolio/${portfolioId}`);
+    }
+
+    async updatePortfolio(portfolioId, portfolioData) {
+        return this.request(`/portfolio/${portfolioId}`, {
+            method: 'PUT',
+            body: JSON.stringify(portfolioData)
+        });
+    }
+
+    async deletePortfolio(portfolioId) {
+        return this.request(`/portfolio/${portfolioId}`, {
+            method: 'DELETE'
+        });
+    }
+
+    async deployPortfolio(portfolioId) {
+        return this.request(`/portfolio/${portfolioId}/deploy`, {
+            method: 'POST'
+        });
+    }
+
+    async getPortfolioStats() {
+        return this.request('/portfolio/stats');
+    }
 }
 
 // Create and export global API instance

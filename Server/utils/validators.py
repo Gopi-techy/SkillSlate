@@ -1,5 +1,9 @@
 import re
+import jwt
+import os
 from datetime import datetime
+from functools import wraps
+from flask import request, jsonify
 
 def validate_email(email):
     """Validate email format"""
@@ -60,3 +64,49 @@ def validate_user_data(data):
                 errors['name'] = message
     
     return len(errors) == 0, errors
+
+def validate_auth_token(f):
+    """Decorator to validate JWT authentication token"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        token = None
+        
+        # Check for token in Authorization header
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            try:
+                token = auth_header.split(' ')[1]  # Bearer <token>
+            except IndexError:
+                return jsonify({
+                    'success': False,
+                    'message': 'Invalid authorization header format'
+                }), 401
+        
+        if not token:
+            return jsonify({
+                'success': False,
+                'message': 'Authentication token is missing'
+            }), 401
+        
+        try:
+            # Decode the token
+            secret_key = os.environ.get('SECRET_KEY', 'your-secret-key-change-in-production')
+            data = jwt.decode(token, secret_key, algorithms=['HS256'])
+            
+            # Add current user info to kwargs
+            kwargs['current_user'] = data
+            
+        except jwt.ExpiredSignatureError:
+            return jsonify({
+                'success': False,
+                'message': 'Token has expired'
+            }), 401
+        except jwt.InvalidTokenError:
+            return jsonify({
+                'success': False,
+                'message': 'Invalid token'
+            }), 401
+        
+        return f(*args, **kwargs)
+    
+    return decorated_function

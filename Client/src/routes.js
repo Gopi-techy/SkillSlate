@@ -96,7 +96,7 @@ export function setupRoutes(app) {
     console.log('✅ Added signup route');
 
     // Dashboard (Protected)
-    router.addRoute('dashboard', () => {
+    router.addRoute('dashboard', async () => {
         console.log('📊 Rendering dashboard');
         
         // First check if user is already loaded
@@ -111,6 +111,24 @@ export function setupRoutes(app) {
         
         console.log('✅ User authenticated for dashboard:', app.user.email);
         
+        // Fetch GitHub data if not already loaded
+        if (!app.user.githubData && !app.user.githubDataFetching) {
+            app.user.githubDataFetching = true;
+            try {
+                const response = await app.apiService.getGithubStatus();
+                if (response && response.data) {
+                    app.user.githubData = response.data;
+                } else {
+                    app.user.githubData = null;
+                }
+            } catch (error) {
+                console.warn('Failed to fetch GitHub status:', error);
+                app.user.githubData = null;
+            } finally {
+                app.user.githubDataFetching = false;
+            }
+        }
+        
         const dashboard = new Dashboard(
             app.user,
             () => {
@@ -120,6 +138,10 @@ export function setupRoutes(app) {
             (page) => router.navigate(page)
         );
         window.dashboardComponent = dashboard;
+        
+        // Wait for portfolios to load before rendering
+        await dashboard.loadPortfolios();
+        
         const content = dashboard.render();
         console.log('Dashboard content length:', content ? content.length : 'null/undefined');
         return content;

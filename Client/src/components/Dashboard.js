@@ -1,20 +1,51 @@
 import { createIcon } from '../utils/icons.js';
+import { apiService } from '../utils/api.js';
 
 export class Dashboard {
   constructor(user, onAuth, onNavigate) {
     this.user = user;
     this.onAuth = onAuth;
     this.onNavigate = onNavigate;
-    this.portfolios = [
-      {
-        id: '1',
-        name: 'My Portfolio',
-        template: 'modern',
-        status: 'deployed',
-        url: 'https://johndoe.skillslate.app',
-        lastDeployed: '2024-01-15'
+    this.portfolios = [];
+    this.portfolioStats = null;
+    this.loading = true;
+  }
+
+  async loadPortfolios() {
+    try {
+      const response = await apiService.getPortfolios();
+      console.log('Portfolio API response:', response);
+      if (response.success) {
+        this.portfolios = response.portfolios || [];
+        console.log('Loaded portfolios:', this.portfolios);
+      } else {
+        console.error('Failed to load portfolios:', response.message);
+        this.portfolios = [];
       }
-    ];
+    } catch (error) {
+      console.error('Error loading portfolios:', error);
+      this.portfolios = [];
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  forceRerender() {
+    // Trigger a re-render by calling the app's render method
+    if (window.app && window.app.render) {
+      window.app.render();
+    }
+  }
+
+  async loadPortfolioStats() {
+    try {
+      const response = await apiService.getPortfolioStats();
+      if (response.success) {
+        this.portfolioStats = response.stats;
+      }
+    } catch (error) {
+      console.error('Error loading portfolio stats:', error);
+    }
   }
 
   render() {
@@ -64,35 +95,60 @@ export class Dashboard {
   }
 
   renderQuickActions() {
+    const portfolioCount = this.portfolios.length;
+    const maxPortfolios = 2; // GitHub Pages limit
+    const isAtLimit = portfolioCount >= maxPortfolios;
+    
     return `
       <div class="glass-card p-8 animate-slide-in-left">
         <h2 class="text-2xl font-semibold text-white mb-6">Quick Start</h2>
         <div class="grid md:grid-cols-2 gap-6">
           <button
-            data-nav="create"
-            class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white p-8 rounded-2xl transition-all transform hover:scale-105 flex items-center space-x-4 card-hover"
+            ${isAtLimit ? 'disabled' : 'data-nav="create"'}
+            class="${isAtLimit ? 
+              'bg-gradient-to-r from-gray-600 to-gray-700 text-gray-400 cursor-not-allowed p-8 rounded-2xl flex items-center space-x-4' : 
+              'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white p-8 rounded-2xl transition-all transform hover:scale-105 flex items-center space-x-4 card-hover'
+            }"
           >
             <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-              ${createIcon('Plus', 'w-6 h-6')}
+              ${isAtLimit ? createIcon('X', 'w-6 h-6') : createIcon('Plus', 'w-6 h-6')}
             </div>
             <div class="text-left">
-              <div class="font-semibold text-lg">Create New Portfolio</div>
-              <div class="text-sm text-cyan-100">From prompt or resume</div>
+              <div class="font-semibold text-lg">${isAtLimit ? 'Portfolio Limit Reached' : 'Create New Portfolio'}</div>
+              <div class="text-sm ${isAtLimit ? 'text-gray-500' : 'text-cyan-100'}">
+                ${isAtLimit ? 'Delete a portfolio to create new one' : 'From prompt or resume'}
+              </div>
             </div>
           </button>
           <button
-            data-nav="create"
-            class="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 text-white p-8 rounded-2xl transition-all transform hover:scale-105 flex items-center space-x-4 card-hover"
+            ${isAtLimit ? 'disabled' : 'data-nav="create"'}
+            class="${isAtLimit ? 
+              'bg-gradient-to-r from-gray-600 to-gray-700 text-gray-400 cursor-not-allowed p-8 rounded-2xl flex items-center space-x-4' : 
+              'bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 text-white p-8 rounded-2xl transition-all transform hover:scale-105 flex items-center space-x-4 card-hover'
+            }"
           >
             <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-              ${createIcon('Palette', 'w-6 h-6')}
+              ${isAtLimit ? createIcon('X', 'w-6 h-6') : createIcon('Palette', 'w-6 h-6')}
             </div>
             <div class="text-left">
-              <div class="font-semibold text-lg">Create from Template</div>
-              <div class="text-sm text-purple-100">Modern, Creative, Minimal</div>
+              <div class="font-semibold text-lg">${isAtLimit ? 'Portfolio Limit Reached' : 'Create from Template'}</div>
+              <div class="text-sm ${isAtLimit ? 'text-gray-500' : 'text-purple-100'}">
+                ${isAtLimit ? 'Delete a portfolio to create new one' : 'Modern, Creative, Minimal'}
+              </div>
             </div>
           </button>
         </div>
+        ${isAtLimit ? `
+          <div class="mt-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <div class="flex items-center space-x-2">
+              ${createIcon('AlertTriangle', 'w-5 h-5 text-red-400')}
+              <span class="text-sm text-red-400 font-medium">GitHub Pages Limit Reached</span>
+            </div>
+            <p class="text-xs text-red-300 mt-1">
+              You've reached the maximum of 2 portfolios allowed with GitHub Pages. Delete an existing portfolio to create a new one.
+            </p>
+          </div>
+        ` : ''}
       </div>
     `;
   }
@@ -104,8 +160,18 @@ export class Dashboard {
           <h2 class="text-2xl font-semibold text-white">Your Portfolios</h2>
         </div>
         <div class="p-6">
-          ${this.portfolios.length > 0 ? this.renderPortfolioList() : this.renderEmptyState()}
+          ${this.loading ? this.renderLoadingState() : 
+            this.portfolios.length > 0 ? this.renderPortfolioList() : this.renderEmptyState()}
         </div>
+      </div>
+    `;
+  }
+
+  renderLoadingState() {
+    return `
+      <div class="flex items-center justify-center py-12">
+        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+        <span class="ml-3 text-gray-400">Loading portfolios...</span>
       </div>
     `;
   }
@@ -125,9 +191,13 @@ export class Dashboard {
                       ? 'bg-green-500/20 text-green-400 border border-green-500/30' 
                       : portfolio.status === 'building'
                       ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                      : portfolio.status === 'failed'
+                      ? 'bg-red-500/20 text-red-400 border border-red-500/30'
                       : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
                   }">
                     ${portfolio.status === 'deployed' ? createIcon('Check', 'w-3 h-3 mr-1') : ''}
+                    ${portfolio.status === 'building' ? createIcon('Rocket', 'w-3 h-3 mr-1') : ''}
+                    ${portfolio.status === 'failed' ? createIcon('X', 'w-3 h-3 mr-1') : ''}
                     ${portfolio.status.charAt(0).toUpperCase() + portfolio.status.slice(1)}
                   </span>
                   ${portfolio.url ? `
@@ -141,14 +211,40 @@ export class Dashboard {
                       ${createIcon('ExternalLink', 'w-3 h-3')}
                     </a>
                   ` : ''}
+                  ${portfolio.status === 'draft' ? `
+                    <button 
+                      class="text-cyan-400 hover:text-cyan-300 text-sm flex items-center space-x-1 transition-colors"
+                      onclick="window.dashboardComponent.deployPortfolio('${portfolio.id}')"
+                    >
+                      <span>Deploy</span>
+                      ${createIcon('Rocket', 'w-3 h-3')}
+                    </button>
+                  ` : ''}
                 </div>
+                ${portfolio.lastDeployed ? `
+                  <p class="text-xs text-gray-500 mt-2">
+                    Last deployed: ${new Date(portfolio.lastDeployed).toLocaleDateString()}
+                  </p>
+                ` : ''}
               </div>
               <div class="flex items-center space-x-2">
-                <button class="p-3 text-gray-400 hover:text-white rounded-xl hover:bg-gray-700/50 transition-all duration-200">
+                <button 
+                  class="p-3 text-gray-400 hover:text-white rounded-xl hover:bg-gray-700/50 transition-all duration-200"
+                  onclick="window.dashboardComponent.editPortfolio('${portfolio.id}')"
+                >
                   ${createIcon('Settings', 'w-5 h-5')}
                 </button>
-                <button class="p-3 text-gray-400 hover:text-white rounded-xl hover:bg-gray-700/50 transition-all duration-200">
+                <button 
+                  class="p-3 text-gray-400 hover:text-white rounded-xl hover:bg-gray-700/50 transition-all duration-200"
+                  onclick="window.dashboardComponent.viewPortfolio('${portfolio.id}')"
+                >
                   ${createIcon('Eye', 'w-5 h-5')}
+                </button>
+                <button 
+                  class="p-3 text-red-400 hover:text-red-300 rounded-xl hover:bg-red-500/10 transition-all duration-200"
+                  onclick="window.dashboardComponent.deletePortfolio('${portfolio.id}')"
+                >
+                  ${createIcon('X', 'w-5 h-5')}
                 </button>
               </div>
             </div>
@@ -160,15 +256,15 @@ export class Dashboard {
 
   renderEmptyState() {
     return `
-      <div class="text-center py-12">
-        <div class="w-16 h-16 bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          ${createIcon('FileText', 'w-8 h-8 text-gray-400')}
+      <div class="text-center py-3">
+        <div class="w-8 h-8 bg-gray-800 rounded-lg flex items-center justify-center mx-auto mb-2">
+          ${createIcon('FileText', 'w-4 h-4 text-gray-400')}
         </div>
-        <h3 class="text-xl font-medium text-white mb-3">No portfolios yet</h3>
-        <p class="text-gray-400 mb-6">Create your first portfolio to get started</p>
+        <h3 class="text-base font-medium text-white mb-1">No portfolios yet</h3>
+        <p class="text-gray-400 mb-3 text-xs">Create your first portfolio to get started</p>
         <button
           data-nav="create"
-          class="btn-primary"
+          class="btn-primary text-xs px-3 py-1.5"
         >
           Create Portfolio
         </button>
@@ -241,24 +337,55 @@ export class Dashboard {
   }
 
   renderUsageStats() {
+    const portfolioCount = this.portfolios.length;
+    const maxPortfolios = 2; // GitHub Pages limit
+    const deployedCount = this.portfolios.filter(p => p.status === 'deployed').length;
+    const maxDeployments = maxPortfolios; // Same as portfolio limit for GitHub Pages
+    
+    const portfolioPercentage = (portfolioCount / maxPortfolios) * 100;
+    const deploymentPercentage = (deployedCount / maxDeployments) * 100;
+    
+    const isAtLimit = portfolioCount >= maxPortfolios;
+    const isNearLimit = portfolioCount >= maxPortfolios * 0.8;
+    
     return `
       <div class="glass-card p-6 animate-fade-in-up" style="animation-delay: 0.2s;">
         <h3 class="font-semibold text-white mb-6 text-lg">Usage This Month</h3>
         <div class="space-y-6">
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-300">Portfolios</span>
-            <span class="text-sm font-medium text-white">${this.portfolios.length}/3</span>
+            <span class="text-sm font-medium ${isAtLimit ? 'text-red-400' : isNearLimit ? 'text-yellow-400' : 'text-white'}">
+              ${portfolioCount}/${maxPortfolios}
+              ${isAtLimit ? ' (Limit Reached)' : ''}
+            </span>
           </div>
           <div class="flex justify-between items-center">
             <span class="text-sm text-gray-300">Deployments</span>
-            <span class="text-sm font-medium text-white">5/10</span>
+            <span class="text-sm font-medium text-white">${deployedCount}/${maxDeployments}</span>
           </div>
           <div class="w-full bg-gray-700 rounded-full h-3">
-            <div class="bg-gradient-to-r from-cyan-500 to-blue-500 h-3 rounded-full transition-all duration-1000" style="width: 60%"></div>
+            <div class="bg-gradient-to-r ${isAtLimit ? 'from-red-500 to-red-600' : isNearLimit ? 'from-yellow-500 to-yellow-600' : 'from-cyan-500 to-blue-500'} h-3 rounded-full transition-all duration-1000" 
+                 style="width: ${Math.min(portfolioPercentage, 100)}%"></div>
           </div>
           <div class="text-xs text-gray-400 text-center">
-            Upgrade for unlimited portfolios
+            ${isAtLimit ? 
+              'GitHub Pages limit reached (2 portfolios max)' : 
+              isNearLimit ? 
+              'Approaching GitHub Pages limit' : 
+              'Free tier: GitHub Pages deployment'
+            }
           </div>
+          ${isAtLimit ? `
+            <div class="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <div class="flex items-center space-x-2">
+                ${createIcon('AlertTriangle', 'w-4 h-4 text-red-400')}
+                <span class="text-sm text-red-400 font-medium">Portfolio Limit Reached</span>
+              </div>
+              <p class="text-xs text-red-300 mt-1">
+                GitHub Pages allows maximum 2 portfolios per account. Delete a portfolio to create a new one.
+              </p>
+            </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -304,5 +431,52 @@ export class Dashboard {
         }
       });
     }
+  }
+
+  // Portfolio management methods
+  async deployPortfolio(portfolioId) {
+    try {
+      const response = await apiService.deployPortfolio(portfolioId);
+      if (response.success) {
+        alert(`Portfolio deployed successfully! URL: ${response.url}`);
+        await this.loadPortfolios(); // Refresh the list
+      } else {
+        alert(`Failed to deploy portfolio: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Error deploying portfolio:', error);
+      alert('Failed to deploy portfolio. Please try again.');
+    }
+  }
+
+  async deletePortfolio(portfolioId) {
+    if (!confirm('Are you sure you want to delete this portfolio? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      const response = await apiService.deletePortfolio(portfolioId);
+      if (response.success) {
+        alert('Portfolio deleted successfully!');
+        await this.loadPortfolios(); // Refresh the list
+      } else {
+        alert(`Failed to delete portfolio: ${response.message}`);
+      }
+    } catch (error) {
+      console.error('Error deleting portfolio:', error);
+      alert('Failed to delete portfolio. Please try again.');
+    }
+  }
+
+  editPortfolio(portfolioId) {
+    // TODO: Navigate to portfolio editor
+    console.log('Edit portfolio:', portfolioId);
+    alert('Portfolio editor coming soon!');
+  }
+
+  viewPortfolio(portfolioId) {
+    // TODO: Navigate to portfolio viewer
+    console.log('View portfolio:', portfolioId);
+    alert('Portfolio viewer coming soon!');
   }
 }

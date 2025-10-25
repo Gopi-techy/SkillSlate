@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from config.database import db_instance
 from routes.auth import auth_bp
 from routes.github import github_bp
+from routes.portfolio import portfolio_bp
 
 # Load environment variables from .env file
 from pathlib import Path
@@ -48,6 +49,7 @@ def create_app():
     # Register blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(github_bp)
+    app.register_blueprint(portfolio_bp)
     
     # Health check endpoint
     @app.route('/api/health', methods=['GET'])
