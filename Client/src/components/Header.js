@@ -82,14 +82,14 @@ export class Header {
     return `
       <button
         data-nav="dashboard"
-        class="text-gray-300 hover:text-white transition-colors font-medium"
+        class="text-gray-300 hover:text-white transition-colors font-medium focus:outline-none"
       >
         Dashboard
       </button>
       
       <button
         data-nav="create"
-        class="text-gray-300 hover:text-white transition-colors font-medium"
+        class="text-gray-300 hover:text-white transition-colors font-medium focus:outline-none"
       >
         Create Portfolio
       </button>
@@ -113,21 +113,21 @@ export class Header {
           <div class="py-1">
             <button 
               id="github-connect-btn"
-              class="flex items-center space-x-2 w-full px-4 py-2 text-sm ${this.user.githubData ? 'text-green-500' : 'text-gray-300'} hover:bg-gray-800/50 hover:text-white transition-colors"
+              class="flex items-center space-x-2 w-full px-4 py-2 text-sm ${this.user.githubData ? 'text-green-500' : 'text-gray-300'} hover:text-white transition-colors focus:outline-none"
             >
               ${createIcon('Github', 'w-4 h-4')}
-              <span>${this.user.githubData ? 'GitHub Connected' : 'Connect GitHub'}</span>
+              <span>${this.user.githubData ? 'Connected' : 'Connect GitHub'}</span>
             </button>
             <button 
               id="settings-btn"
-              class="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+              class="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors focus:outline-none"
             >
               ${createIcon('Settings', 'w-4 h-4')}
               <span>Settings</span>
             </button>
             <button
               id="sign-out"
-              class="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:bg-gray-800/50 hover:text-white transition-colors"
+              class="flex items-center space-x-2 w-full px-4 py-2 text-sm text-gray-300 hover:text-white transition-colors focus:outline-none"
             >
               ${createIcon('LogOut', 'w-4 h-4')}
               <span>Sign Out</span>
@@ -348,10 +348,19 @@ export class Header {
     const githubConnectBtn = document.getElementById('github-connect-btn');
     this.githubConnectHandler = async () => {
       try {
-        const response = await apiService.getGithubAuthUrl('connect');
+        console.log('🔗 GitHub connect clicked from header');
+        
+        // Set action to 'connect' so it knows to link to existing account
+        localStorage.setItem('github_action', 'connect');
+        
+        // Generate state for OAuth
+        const state = Math.random().toString(36).substring(2, 15);
+        localStorage.setItem('github_state', state);
+        
+        // Get GitHub auth URL
+        const response = await apiService.getGithubAuthUrl(state);
+        
         if (response.url) {
-          // Store that this is a connection attempt, not a login
-          localStorage.setItem('github_action', 'connect');
           window.location.href = response.url;
         }
       } catch (error) {

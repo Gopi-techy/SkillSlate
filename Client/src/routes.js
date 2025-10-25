@@ -159,13 +159,16 @@ export function setupRoutes(app) {
     router.addRoute('github-callback', async () => {
         console.log('🔄 Processing GitHub callback');
         
-        // Check if this is a page reload after successful auth (no stored state but has callback params)
+        // Get URL parameters
         const urlParams = new URLSearchParams(window.location.search);
         const access_token = urlParams.get('access_token');
         const storedState = localStorage.getItem('github_state');
+        const storedAction = localStorage.getItem('github_action');
         
-        if (!storedState && access_token) {
-            console.log('⏭️ Detected page reload after auth, redirecting to dashboard');
+        // Check if this is a page reload AFTER successful auth
+        // Only skip if we have no stored action (meaning auth was already completed)
+        if (!storedState && !storedAction && access_token) {
+            console.log('⏭️ Detected page reload after completed auth, redirecting to dashboard');
             // Clean URL and redirect to dashboard
             window.history.replaceState({}, document.title, '/dashboard');
             router.navigate('dashboard');
@@ -216,16 +219,19 @@ export function setupRoutes(app) {
                 throw new Error('Security verification failed. Please try again.');
             }
             
-            // Get the stored action and clear data
-            const storedAction = localStorage.getItem('github_action');
+            // Clear stored data after validation
             localStorage.removeItem('github_state');
             localStorage.removeItem('github_action');
             
             console.log('✅ GitHub token received, processing authentication...');
+            console.log('🔑 Action type:', storedAction || 'new login');
             
             if (storedAction === 'connect') {
+                console.log('🔗 Linking GitHub to existing logged-in user...');
                 // Connection from logged-in user
                 await app.apiService.linkGithub(access_token);
+                console.log('✅ GitHub linked successfully');
+                
                 const profileResponse = await app.apiService.getProfile();
                 if (!profileResponse.user) throw new Error('Could not update user profile');
                 
@@ -233,6 +239,7 @@ export function setupRoutes(app) {
                 window.history.replaceState({}, document.title, '/dashboard');
                 setTimeout(() => router.navigate('dashboard'), 500);
             } else {
+                console.log('🆕 New GitHub login/signup...');
                 // New login/signup
                 const response = await app.apiService.login({ provider: 'github', access_token });
                 if (!response?.user?.token) throw new Error('Failed to authenticate with GitHub');
@@ -251,7 +258,6 @@ export function setupRoutes(app) {
                 setTimeout(() => router.navigate('dashboard'), 500);
             }
             
-            return content;
             return content;
             
         } catch (error) {

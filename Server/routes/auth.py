@@ -196,28 +196,32 @@ def github_login():
         if not primary_email:
             return jsonify({'message': 'No primary email found in GitHub account'}), 400
             
-        # Find or create user
+        # Find or create user by email
         user_doc = User.find_by_email(primary_email)
         if user_doc:
-            # Update existing user
+            # EXISTING USER: Merge GitHub account with existing email/password account
+            # Update the github_connected flag
             User.update_github_connection(user_doc['_id'], True)
+            print(f"✅ Linked GitHub account to existing user: {primary_email}")
         else:
-            # Create new user
+            # NEW USER: Create account from GitHub
             user_doc = User(
                 name=github_user['name'] or github_user['login'],
                 email=primary_email,
-                password=bcrypt.generate_password_hash(os.urandom(32).hex()).decode('utf-8'),
+                password=bcrypt.generate_password_hash(os.urandom(32).hex()).decode('utf-8'),  # Random password for GitHub-only accounts
                 github_connected=True
             )
-            user_doc.save()
+            user_id = user_doc.save()
+            user_doc = User.find_by_id(user_id)
+            print(f"✅ Created new user from GitHub: {primary_email}")
             
-        # Generate JWT token
+        # Generate JWT token for the user
         token = generate_token(user_doc['_id'])
         
         # Update last login time
         User.update_last_login(user_doc['_id'])
         
-        # Return user data
+        # Return user data with token
         user_data = User.to_dict(user_doc)
         user_data['token'] = token
         
@@ -227,4 +231,5 @@ def github_login():
         }), 200
         
     except Exception as e:
+        print(f"❌ GitHub login error: {str(e)}")
         return jsonify({'message': f'GitHub login failed: {str(e)}'}), 500

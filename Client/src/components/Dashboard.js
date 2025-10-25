@@ -177,25 +177,65 @@ export class Dashboard {
   }
 
   renderGitHubIntegration() {
+    const githubData = this.user.githubData;
+    const isConnected = githubData || this.user.githubConnected;
+    
     return `
       <div class="glass-card p-6 animate-fade-in-up">
-        <h3 class="font-semibold text-white mb-4 text-lg">GitHub Integration</h3>
-        ${this.user.githubConnected ? `
-          <div class="flex items-center space-x-3 text-green-400 mb-4">
-            <div class="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
-              ${createIcon('Check', 'w-5 h-5')}
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="font-semibold text-white text-lg">GitHub</h3>
+          ${createIcon('Github', 'w-5 h-5 text-gray-400')}
+        </div>
+        
+        ${isConnected ? `
+          <!-- Connected State -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+              <div class="flex items-center space-x-2">
+                ${createIcon('Check', 'w-4 h-4 text-green-500')}
+                <span class="text-sm font-medium text-green-500">Connected</span>
+              </div>
+              ${githubData?.login ? `
+                <span class="text-xs text-gray-400">@${githubData.login}</span>
+              ` : ''}
             </div>
-            <span class="text-sm font-medium">Connected</span>
+            ${githubData?.public_repos !== undefined ? `
+              <div class="grid grid-cols-2 gap-2">
+                <div class="bg-gray-800/50 rounded-lg p-2 text-center">
+                  <div class="text-base font-semibold text-white">${githubData.public_repos}</div>
+                  <div class="text-xs text-gray-400">Repositories</div>
+                </div>
+                <div class="bg-gray-800/50 rounded-lg p-2 text-center">
+                  <div class="text-base font-semibold text-white">${githubData.followers || 0}</div>
+                  <div class="text-xs text-gray-400">Followers</div>
+                </div>
+              </div>
+            ` : ''}
+            <p class="text-xs text-gray-400 mt-2">
+              Deploy to GitHub Pages and sync projects.
+            </p>
           </div>
         ` : `
-          <button class="w-full bg-gray-800 hover:bg-gray-700 border border-gray-600 hover:border-gray-500 text-white py-3 px-4 rounded-xl transition-all duration-300 flex items-center justify-center space-x-2 mb-4">
-            ${createIcon('Github', 'w-5 h-5')}
-            <span>Connect GitHub</span>
-          </button>
+          <!-- Not Connected State -->
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 bg-gray-800/30 border border-gray-700/50 rounded-lg">
+              <div class="flex items-center space-x-2">
+                ${createIcon('X', 'w-4 h-4 text-gray-500')}
+                <span class="text-sm font-medium text-gray-400">Not Connected</span>
+              </div>
+            </div>
+            <button 
+              id="dashboard-github-connect"
+              class="w-full bg-gradient-to-r from-gray-800 to-gray-900 hover:from-gray-700 hover:to-gray-800 border border-gray-600 hover:border-gray-500 text-white py-3 px-4 rounded-lg transition-all duration-200 flex items-center justify-center space-x-2"
+            >
+              ${createIcon('Github', 'w-4 h-4')}
+              <span class="font-medium">Connect GitHub</span>
+            </button>
+            <p class="text-xs text-gray-400 mt-2">
+              Link account to deploy and sync projects.
+            </p>
+          </div>
         `}
-        <p class="text-xs text-gray-400">
-          Auto-import projects and showcase your coding skills
-        </p>
       </div>
     `;
   }
@@ -236,5 +276,33 @@ export class Dashboard {
         }
       });
     });
+    
+    // Dashboard GitHub connect button
+    const dashboardGithubConnect = document.getElementById('dashboard-github-connect');
+    if (dashboardGithubConnect) {
+      dashboardGithubConnect.addEventListener('click', async () => {
+        console.log('🔗 GitHub connect clicked from dashboard');
+        try {
+          const { apiService } = await import('../utils/api.js');
+          
+          // Set action to 'connect' so it knows to link to existing account
+          localStorage.setItem('github_action', 'connect');
+          
+          // Generate state for OAuth
+          const state = Math.random().toString(36).substring(2, 15);
+          localStorage.setItem('github_state', state);
+          
+          // Get GitHub auth URL
+          const response = await apiService.getGithubAuthUrl(state);
+          
+          if (response.url) {
+            window.location.href = response.url;
+          }
+        } catch (error) {
+          console.error('Failed to start GitHub connection:', error);
+          alert('Failed to connect to GitHub. Please try again.');
+        }
+      });
+    }
   }
 }
