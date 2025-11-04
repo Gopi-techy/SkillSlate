@@ -3,7 +3,7 @@ from bson import ObjectId
 from config.database import db_instance
 
 class Portfolio:
-    def __init__(self, user_id, name, template, status='draft', url=None, github_repo=None):
+    def __init__(self, user_id, name, template, status='draft', url=None, github_repo=None, data=None, html=None):
         self.user_id = user_id
         self.name = name
         self.template = template
@@ -13,7 +13,9 @@ class Portfolio:
         self.created_at = datetime.utcnow()
         self.updated_at = datetime.utcnow()
         self.last_deployed = None
-        self.content = None  # Portfolio content/HTML
+        self.content = None  # Portfolio content/HTML (deprecated, use html)
+        self.data = data  # Structured portfolio data (JSON)
+        self.html = html  # Generated HTML
         self.settings = {}  # Portfolio settings and configuration
     
     @staticmethod
@@ -34,6 +36,8 @@ class Portfolio:
             'updatedAt': self.updated_at,
             'lastDeployed': self.last_deployed,
             'content': self.content,
+            'data': self.data,
+            'html': self.html,
             'settings': self.settings
         }
         
@@ -94,6 +98,17 @@ class Portfolio:
         
         if settings:
             update_data['settings'] = settings
+        
+        collection.update_one(
+            {'_id': ObjectId(portfolio_id)},
+            {'$set': update_data}
+        )
+    
+    @staticmethod
+    def update_portfolio(portfolio_id, update_data):
+        """Update portfolio with custom data"""
+        collection = Portfolio.get_collection()
+        update_data['updatedAt'] = datetime.utcnow()
         
         collection.update_one(
             {'_id': ObjectId(portfolio_id)},

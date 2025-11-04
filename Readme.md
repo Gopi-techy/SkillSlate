@@ -14,21 +14,15 @@ SkillSlate enables users to:
 - **Link GitHub** to auto-import recent repositories and languages
 - **AI‑enhance** content (About, Projects, Experience, Skills, Certifications)
 - **Preview** in multiple templates (Modern, Creative, Minimal)
-- **Deploy with one click** to a global CDN (Vercel recommended; Netlify supported)
-- Use a hosted URL like `https://username.skillslate.app` or connect a custom domain
-
-### Why Vercel (vs Netlify)?
-
-- Vercel provides a simple API/CLI, excellent DX, and a generous free tier for static sites.
-- Netlify is also viable. We default to **Vercel** for examples and automation.
+- **Deploy with one click** to a global CDN (Github Pages)
 
 ---
 
 ## 🧩 Architecture
 
-- Frontend (Next.js/React)
+- Frontend (React)
 
-  - Auth (email/password, OAuth via GitHub/Google)
+  - Auth (email/password, OAuth via GitHub)
   - Dashboard: prompt/resume upload, GitHub connect, live preview, template gallery
   - Deploy button triggers backend build + hosting deployment
 
@@ -44,7 +38,7 @@ SkillSlate enables users to:
 
 - Hosting
 
-  - Vercel (recommended) via API/CLI; Netlify alternative
+  -Github Pages (recommended)
 
 - Storage/DB (optional for MVP)
 

@@ -3,6 +3,7 @@ import { LandingPage } from './components/LandingPage.js';
 import { AuthPage } from './components/AuthPage.js';
 import { Dashboard } from './components/Dashboard.js';
 import { CreatePortfolio } from './components/CreatePortfolio.js';
+import { AIPortfolioGenerator } from './components/AIPortfolioGenerator.js';
 // Templates temporarily removed
 // import { TemplatesPage } from './components/TemplatesPage.js';
 import { auth } from './utils/auth.js';
@@ -164,16 +165,20 @@ export function setupRoutes(app) {
         
         console.log('✅ User authenticated for create portfolio:', app.user.email);
         
-        const createPortfolio = new CreatePortfolio(
+        const aiGenerator = new AIPortfolioGenerator(
             app.user,
-            (page) => router.navigate(page)
+            (page) => router.navigate(page),
+            (portfolioId) => {
+                console.log('Portfolio created:', portfolioId);
+                setTimeout(() => router.navigate('dashboard'), 2000);
+            }
         );
-        window.createPortfolioComponent = createPortfolio;
-        const content = createPortfolio.render();
-        console.log('CreatePortfolio content length:', content ? content.length : 'null/undefined');
+        window.createPortfolioComponent = aiGenerator;
+        const content = aiGenerator.render();
+        console.log('AIPortfolioGenerator content length:', content ? content.length : 'null/undefined');
         return content;
     });
-    console.log('✅ Added create route');
+    console.log('✅ Added create portfolio route with AI generation');
 
     // Templates route removed
 

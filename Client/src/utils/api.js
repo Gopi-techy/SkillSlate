@@ -15,10 +15,12 @@ class ApiService {
     }
 
     // Get authentication headers
-    getAuthHeaders() {
-        const headers = {
-            'Content-Type': 'application/json',
-        };
+    getAuthHeaders(includeContentType = true) {
+        const headers = {};
+        
+        if (includeContentType) {
+            headers['Content-Type'] = 'application/json';
+        }
         
         if (this.token) {
             headers['Authorization'] = `Bearer ${this.token}`;
@@ -37,6 +39,46 @@ class ApiService {
 
         try {
             const response = await fetch(url, config);
+            const data = await response.json();
+
+            if (!response.ok) {
+                const error = new Error(data.message || `HTTP error! status: ${response.status}`);
+                error.status = response.status;
+                error.data = data;
+                throw error;
+            }
+
+            return data;
+        } catch (error) {
+            return this.handleApiError(error, endpoint);
+        }
+    }
+
+    // POST request helper
+    async post(endpoint, data) {
+        return this.request(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
+    // POST FormData request (for file uploads)
+    async postFormData(endpoint, formData) {
+        const url = `${this.baseURL}${endpoint}`;
+        const headers = {};
+        
+        if (this.token) {
+            headers['Authorization'] = `Bearer ${this.token}`;
+        }
+        // Don't set Content-Type - browser will set it with boundary for multipart/form-data
+
+        try {
+            const response = await fetch(url, {
+                method: 'POST',
+                headers,
+                body: formData,
+            });
+
             const data = await response.json();
 
             if (!response.ok) {
