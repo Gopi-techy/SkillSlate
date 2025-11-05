@@ -31,6 +31,7 @@ def generate_portfolio_from_prompt(user_prompt: str, template: str = "modern") -
     Returns:
         Dict with portfolio data structure
     """
+    print(f"🔧 generate_portfolio_from_prompt called with prompt length: {len(user_prompt)}")
     
     system_prompt = """You are an expert portfolio website builder and career consultant.
     Your job is to extract information from user input and create a professional portfolio structure.
@@ -100,7 +101,10 @@ def generate_portfolio_from_prompt(user_prompt: str, template: str = "modern") -
     """
     
     try:
+        print(f"🔑 Getting OpenAI client...")
         client = get_client()
+        print(f"📡 Calling OpenAI API (gpt-4o)...")
+        
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -109,20 +113,29 @@ def generate_portfolio_from_prompt(user_prompt: str, template: str = "modern") -
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=3000
+            max_tokens=3000,
+            timeout=60  # 60 second timeout
         )
         
+        print(f"✅ OpenAI API responded successfully")
         content = response.choices[0].message.content
+        print(f"📦 Parsing JSON response (length: {len(content)} chars)...")
         portfolio_data = json.loads(content)
         
         # Validate structure
         if not _validate_portfolio_structure(portfolio_data):
             raise ValueError("Invalid portfolio structure returned by AI")
         
+        print(f"✅ Portfolio data validated successfully")
         return portfolio_data
         
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON parsing error: {e}")
+        print(f"Response content: {content[:500]}...")
+        raise ValueError(f"Failed to parse AI response: {str(e)}")
     except Exception as e:
         print(f"❌ Error generating portfolio from prompt: {e}")
+        print(f"Error type: {type(e).__name__}")
         raise
 
 
@@ -137,6 +150,7 @@ def generate_portfolio_from_resume(resume_text: str, template: str = "modern") -
     Returns:
         Dict with portfolio data structure
     """
+    print(f"🔧 generate_portfolio_from_resume called with resume length: {len(resume_text)}")
     
     system_prompt = """You are an expert at analyzing resumes and creating professional portfolios.
     Extract ALL relevant information from the resume and create an engaging portfolio structure.
@@ -151,7 +165,10 @@ def generate_portfolio_from_resume(resume_text: str, template: str = "modern") -
     Return ONLY valid JSON (no markdown, no code blocks) with the portfolio structure."""
     
     try:
+        print(f"🔑 Getting OpenAI client...")
         client = get_client()
+        print(f"📡 Calling OpenAI API (gpt-4o) with resume...")
+        
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -160,19 +177,28 @@ def generate_portfolio_from_resume(resume_text: str, template: str = "modern") -
             ],
             response_format={"type": "json_object"},
             temperature=0.7,
-            max_tokens=3500
+            max_tokens=3500,
+            timeout=60  # 60 second timeout
         )
         
+        print(f"✅ OpenAI API responded successfully")
         content = response.choices[0].message.content
+        print(f"📦 Parsing JSON response (length: {len(content)} chars)...")
         portfolio_data = json.loads(content)
         
         if not _validate_portfolio_structure(portfolio_data):
             raise ValueError("Invalid portfolio structure returned by AI")
         
+        print(f"✅ Portfolio data validated successfully")
         return portfolio_data
         
+    except json.JSONDecodeError as e:
+        print(f"❌ JSON parsing error: {e}")
+        print(f"Response content: {content[:500]}...")
+        raise ValueError(f"Failed to parse AI response: {str(e)}")
     except Exception as e:
         print(f"❌ Error generating portfolio from resume: {e}")
+        print(f"Error type: {type(e).__name__}")
         raise
 
 
@@ -261,7 +287,10 @@ def generate_html_from_data(portfolio_data: Dict, template: str = "modern") -> s
     Return ONLY the complete HTML (no markdown code blocks, no explanations)."""
     
     try:
+        print(f"🔑 Getting OpenAI client for HTML generation...")
         client = get_client()
+        print(f"📡 Calling OpenAI API (gpt-4o) to generate HTML...")
+        
         response = client.chat.completions.create(
             model="gpt-4o",
             messages=[
@@ -269,18 +298,22 @@ def generate_html_from_data(portfolio_data: Dict, template: str = "modern") -> s
                 {"role": "user", "content": f"Template style: {template}\n\nPortfolio data:\n{json.dumps(portfolio_data, indent=2)}\n\nGenerate complete HTML with inline CSS."}
             ],
             temperature=0.8,
-            max_tokens=16000
+            max_tokens=16000,
+            timeout=90  # 90 second timeout for HTML generation
         )
         
+        print(f"✅ OpenAI API responded with HTML")
         html_content = response.choices[0].message.content
         
         # Clean up markdown code blocks if present
         html_content = _clean_html_response(html_content)
+        print(f"✅ HTML cleaned (final length: {len(html_content)} chars)")
         
         return html_content
         
     except Exception as e:
         print(f"❌ Error generating HTML: {e}")
+        print(f"Error type: {type(e).__name__}")
         raise
 
 

@@ -41,8 +41,10 @@ def generate_portfolio(current_user):
     For resume upload, file should be in multipart/form-data
     """
     try:
+        print(f"🚀 Starting portfolio generation for user: {current_user.get('email', 'unknown')}")
         generation_type = request.form.get('generationType', 'prompt')
         template = 'modern'  # Default template
+        print(f"📝 Generation type: {generation_type}, Template: {template}")
         
         # Estimate generation time
         estimated_time = estimate_generation_time(generation_type, 'resume' in request.files)
@@ -104,7 +106,9 @@ def generate_portfolio(current_user):
                 }), 400
             
             # Generate portfolio from resume
+            print(f"🤖 Calling AI to generate from resume (length: {len(resume_text)} chars)")
             portfolio_data = generate_portfolio_from_resume(resume_text, template)
+            print(f"✅ AI generated portfolio data from resume")
             
         else:
             # Handle text prompt
@@ -117,12 +121,17 @@ def generate_portfolio(current_user):
                 }), 400
             
             # Generate portfolio from prompt
+            print(f"🤖 Calling AI to generate from prompt: {prompt[:100]}...")
             portfolio_data = generate_portfolio_from_prompt(prompt, template)
+            print(f"✅ AI generated portfolio data from prompt")
         
         # Generate HTML from data
+        print(f"🎨 Generating HTML from portfolio data...")
         html_content = generate_html_from_data(portfolio_data, template)
+        print(f"✅ HTML generated (length: {len(html_content)} chars)")
         
         # Save to database as draft
+        print(f"💾 Saving portfolio to database...")
         portfolio = Portfolio(
             user_id=current_user['user_id'],
             name=portfolio_data.get('personalInfo', {}).get('name', 'Untitled Portfolio'),
@@ -133,8 +142,9 @@ def generate_portfolio(current_user):
         )
         
         portfolio_id = portfolio.save()
+        print(f"✅ Portfolio saved with ID: {portfolio_id}")
         
-        return jsonify({
+        response_data = {
             'success': True,
             'message': 'Portfolio generated successfully',
             'estimatedTime': estimated_time,
@@ -144,7 +154,10 @@ def generate_portfolio(current_user):
                 'html': html_content,
                 'template': template
             }
-        }), 201
+        }
+        
+        print(f"📤 Sending response (data size: {len(json.dumps(response_data))} bytes)")
+        return jsonify(response_data), 201
         
     except Exception as e:
         print(f"❌ Portfolio generation error: {e}")

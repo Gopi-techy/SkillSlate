@@ -16,7 +16,7 @@ A pure JavaScript implementation of the SkillSlate AI Portfolio-as-a-Service fro
 ## Project Structure
 
 ```
-apps/Client-JS/
+apps/Client/
 ├── index.html              # Main HTML file
 ├── package.json            # Dependencies and scripts
 ├── vite.config.js          # Vite configuration
