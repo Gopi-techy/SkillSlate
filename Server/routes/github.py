@@ -457,35 +457,189 @@ def one_click_deploy(current_user):
         return jsonify({'message': 'Missing files'}), 400
 
     try:
+        print(f"\n🚀 Starting deployment to {owner}/{repo}")
+        
         # Ensure repo exists
         info = requests.get(f'https://api.github.com/repos/{owner}/{repo}', headers=github_headers(token), timeout=15)
+        repo_exists = info.status_code == 200
+        
         if info.status_code == 404:
+            print(f"📦 Repository doesn't exist, creating: {repo}")
             create = requests.post(
                 'https://api.github.com/user/repos',
                 headers=github_headers(token),
-                json={ 'name': repo, 'private': False, 'has_issues': False, 'has_wiki': False },
+                json={ 'name': repo, 'private': False, 'has_issues': False, 'has_wiki': False, 'auto_init': True },
                 timeout=15
             )
-            create.raise_for_status()
-        elif not info.ok:
+            if create.status_code == 422:
+                # Repository name already taken - might exist but initial check failed
+                # Try to get repo info again
+                print(f"⚠️ 422 Error - repository might already exist, checking again...")
+                info_retry = requests.get(f'https://api.github.com/repos/{owner}/{repo}', headers=github_headers(token), timeout=15)
+                if info_retry.status_code == 200:
+                    print(f"✅ Repository already exists, proceeding with update")
+                    repo_exists = True
+                else:
+                    # Repository truly doesn't exist and name is invalid
+                    error_data = create.json()
+                    print(f"❌ 422 Error creating repository: {error_data}")
+                    error_msg = error_data.get('message', 'Repository name is invalid')
+                    if 'errors' in error_data:
+                        errors = error_data['errors']
+                        if isinstance(errors, list) and len(errors) > 0:
+                            error_msg = errors[0].get('message', error_msg)
+                    return jsonify({'message': f'Repository creation failed: {error_msg}'}), 422
+            elif create.status_code not in (200, 201):
+                create.raise_for_status()
+            else:
+                print(f"✅ Repository created successfully")
+                # Wait a bit for GitHub to initialize the repo
+                import time
+                time.sleep(2)
+                repo_exists = False
+        elif info.status_code == 200:
+            print(f"✅ Repository already exists, will update it")
+            repo_exists = True
+        else:
+            print(f"❌ Error checking repository: {info.status_code}")
             info.raise_for_status()
 
-        # Push files
-        push_res = push_static_site(current_user)
-        if push_res[1] >= 400:
-            return push_res
+        # 1) Create blobs for all files first
+        print(f"📝 Creating blobs for {len(files)} file(s)")
+        blob_shas = {}
+        for f in files:
+            blob = requests.post(
+                f'https://api.github.com/repos/{owner}/{repo}/git/blobs',
+                headers=github_headers(token),
+                json={ 'content': f.get('content', ''), 'encoding': f.get('encoding', 'utf-8') },
+                timeout=15
+            )
+            blob.raise_for_status()
+            blob_shas[f['path']] = blob.json()['sha']
+        print(f"✅ Created {len(blob_shas)} blob(s)")
 
-        # Enable Pages
-        pages = requests.put(
-            f'https://api.github.com/repos/{owner}/{repo}/pages',
+        # 2) Check if branch exists
+        print(f"🔍 Checking if branch '{branch}' exists")
+        ref_res = requests.get(
+            f'https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}',
+            headers=github_headers(token), timeout=15
+        )
+        
+        branch_exists = ref_res.status_code == 200
+        parent_sha = None
+        base_tree_sha = None
+        
+        if branch_exists:
+            print(f"✅ Branch '{branch}' exists, will update it")
+            # Branch exists - get current HEAD
+            parent_sha = ref_res.json()['object']['sha']
+            # Get the tree from current commit
+            commit_res = requests.get(
+                f'https://api.github.com/repos/{owner}/{repo}/git/commits/{parent_sha}',
+                headers=github_headers(token), timeout=15
+            )
+            commit_res.raise_for_status()
+            base_tree_sha = commit_res.json()['tree']['sha']
+        else:
+            print(f"📝 Branch '{branch}' doesn't exist, will create it")
+        
+        # 3) Create tree
+        print(f"🌳 Creating git tree")
+        tree_items = [{ 'path': p, 'mode': '100644', 'type': 'blob', 'sha': sha } for p, sha in blob_shas.items()]
+        tree_json = { 'tree': tree_items }
+        if base_tree_sha:
+            tree_json['base_tree'] = base_tree_sha
+            
+        tree_res = requests.post(
+            f'https://api.github.com/repos/{owner}/{repo}/git/trees',
             headers=github_headers(token),
-            json={ 'source': { 'branch': branch, 'path': path } },
+            json=tree_json,
             timeout=15
         )
-        if pages.status_code not in (201, 202):
-            return jsonify({'message': 'Enable pages failed', 'details': pages.text}), pages.status_code
+        tree_res.raise_for_status()
+        tree_sha = tree_res.json()['sha']
+
+        # 4) Create commit
+        commit_json = { 'message': message, 'tree': tree_sha }
+        if parent_sha:
+            commit_json['parents'] = [parent_sha]
+            
+        commit_res = requests.post(
+            f'https://api.github.com/repos/{owner}/{repo}/git/commits',
+            headers=github_headers(token),
+            json=commit_json,
+            timeout=15
+        )
+        commit_res.raise_for_status()
+        new_commit_sha = commit_res.json()['sha']
+
+        # 5) Create or update branch reference
+        if branch_exists:
+            # Update existing branch
+            update_ref = requests.patch(
+                f'https://api.github.com/repos/{owner}/{repo}/git/refs/heads/{branch}',
+                headers=github_headers(token),
+                json={ 'sha': new_commit_sha, 'force': True },
+                timeout=15
+            )
+            update_ref.raise_for_status()
+        else:
+            # Create new branch
+            create_ref = requests.post(
+                f'https://api.github.com/repos/{owner}/{repo}/git/refs',
+                headers=github_headers(token),
+                json={ 'ref': f'refs/heads/{branch}', 'sha': new_commit_sha },
+                timeout=15
+            )
+            create_ref.raise_for_status()
+
+        # Enable Pages - with retry for new repositories
+        print(f"📄 Enabling GitHub Pages for {owner}/{repo} on branch {branch}")
+        import time
+        
+        pages_enabled = False
+        max_retries = 2
+        
+        for attempt in range(max_retries):
+            pages = requests.post(
+                f'https://api.github.com/repos/{owner}/{repo}/pages',
+                headers=github_headers(token),
+                json={ 'source': { 'branch': branch, 'path': path }, 'build_type': 'legacy' },
+                timeout=15
+            )
+            
+            if pages.status_code in (201, 204):
+                print(f"✅ Pages enabled successfully: {pages.status_code}")
+                pages_enabled = True
+                break
+            elif pages.status_code == 409:
+                print(f"✅ Pages already enabled (409)")
+                pages_enabled = True
+                break
+            elif pages.status_code == 404 and attempt < max_retries - 1:
+                print(f"⚠️ Pages API returned 404 (attempt {attempt + 1}/{max_retries}), waiting 2 seconds...")
+                time.sleep(2)
+            elif pages.status_code == 422:
+                # Validation failed - try checking if pages already exists
+                print(f"⚠️ 422 Error - checking if Pages already enabled...")
+                pages_check = requests.get(
+                    f'https://api.github.com/repos/{owner}/{repo}/pages',
+                    headers=github_headers(token),
+                    timeout=15
+                )
+                if pages_check.status_code == 200:
+                    print(f"✅ Pages already enabled")
+                    pages_enabled = True
+                    break
+            else:
+                print(f"⚠️ Pages enable returned {pages.status_code}: {pages.text}")
+        
+        if not pages_enabled:
+            print(f"⚠️ Could not automatically enable Pages, but deployment succeeded")
+            print(f"ℹ️ Pages will be available once GitHub processes the repository")
 
         url = f'https://{owner}.github.io/{repo}/' if path == '/' else f'https://{owner}.github.io/{repo}{path}'
+        print(f"🌐 Deployment URL: {url}")
         # Persist URL (last commit already stored by push)
         SiteDeployment.upsert(str(current_user['_id']), repo, branch, url, None)
         return jsonify({ 'message': 'Deployed', 'url': url }), 200

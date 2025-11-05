@@ -64,12 +64,15 @@
             updateStatus('Linking your GitHub account...');
             
             // Get the stored action
-            const storedAction = localStorage.getItem('github_action');
+            const storedAction = sessionStorage.getItem('github_action') || localStorage.getItem('github_action');
+            const deployPortfolioId = sessionStorage.getItem('deploy_after_github');
             console.log('🔑 GitHub callback action:', storedAction);
+            console.log('📦 Deploy portfolio ID:', deployPortfolioId);
             
             // Clear stored state data
             localStorage.removeItem('github_state');
             localStorage.removeItem('github_action');
+            sessionStorage.removeItem('github_oauth_state');
             
             if (!access_token) {
                 throw new Error('No access token received');
@@ -77,35 +80,35 @@
             
             updateStatus('Verifying GitHub connection...');
             
-            if (storedAction === 'connect') {
-                // This was a connection request from an already logged-in user
-                await app.apiService.linkGithub(access_token);
-                updateStatus('Updating profile...', 'success');
+            // Link GitHub account
+            await app.apiService.linkGithub(access_token);
+            updateStatus('Updating profile...', 'success');
+            
+            // Update user data
+            const profileResponse = await app.apiService.getProfile();
+            if (!profileResponse.user) {
+                throw new Error('Could not update user profile');
+            }
+            
+            app.handleAuth(profileResponse.user);
+            updateStatus('GitHub account linked successfully!', 'success');
+            
+            // If we're in the middle of deployment, continue with it
+            if (deployPortfolioId) {
+                console.log('🚀 Resuming deployment for portfolio:', deployPortfolioId);
+                sessionStorage.removeItem('deploy_after_github');
+                sessionStorage.setItem('preview_portfolio_id', deployPortfolioId);
+                sessionStorage.setItem('auto_deploy', 'true');
                 
-                // Update user data
-                const profileResponse = await app.apiService.getProfile();
-                if (profileResponse.user) {
-                    app.handleAuth(profileResponse.user);
-                    updateStatus('GitHub account linked successfully!', 'success');
-                    setTimeout(() => router.navigate('dashboard'), 1000);
-                } else {
-                    throw new Error('Could not update user profile');
-                }
+                updateStatus('Redirecting to continue deployment...', 'success');
+                setTimeout(() => router.navigate('create'), 1000);
+            } else if (storedAction === 'connect') {
+                // This was a connection request from settings
+                setTimeout(() => router.navigate('dashboard'), 1000);
             } else {
-                updateStatus('Linking GitHub account...');
                 // This was a login/signup with GitHub
-                await app.apiService.linkGithub(access_token);
-                
-                updateStatus('Getting user profile...', 'success');
-                // Then get the user profile
-                const profileResponse = await app.apiService.getProfile();
-                if (profileResponse.user) {
-                    app.handleAuth(profileResponse.user);
-                    updateStatus('Successfully logged in with GitHub!', 'success');
-                    setTimeout(() => router.navigate('dashboard'), 1000);
-                } else {
-                    throw new Error('Failed to get user profile');
-                }
+                updateStatus('Successfully logged in with GitHub!', 'success');
+                setTimeout(() => router.navigate('dashboard'), 1000);
             }
             
             return content;

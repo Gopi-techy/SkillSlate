@@ -150,7 +150,7 @@ export function setupRoutes(app) {
     console.log('✅ Added dashboard route');
 
     // Create Portfolio (Protected)
-    router.addRoute('create', () => {
+    router.addRoute('create', async () => {
         console.log('🎨 Rendering create portfolio');
         
         // First check if user is already loaded
@@ -174,6 +174,26 @@ export function setupRoutes(app) {
             }
         );
         window.createPortfolioComponent = aiGenerator;
+        
+        // Check if we need to load an existing portfolio
+        const portfolioId = sessionStorage.getItem('preview_portfolio_id');
+        const autoDeploy = sessionStorage.getItem('auto_deploy') === 'true';
+        
+        if (portfolioId) {
+            sessionStorage.removeItem('preview_portfolio_id');
+            await aiGenerator.loadExistingPortfolio(portfolioId);
+            
+            // If auto-deploy flag is set, trigger deployment after loading
+            if (autoDeploy) {
+                sessionStorage.removeItem('auto_deploy');
+                console.log('🚀 Auto-deploying portfolio after GitHub authentication');
+                // Trigger deployment after render
+                setTimeout(() => {
+                    aiGenerator.handleDeploy();
+                }, 500);
+            }
+        }
+        
         const content = aiGenerator.render();
         console.log('AIPortfolioGenerator content length:', content ? content.length : 'null/undefined');
         return content;

@@ -474,9 +474,18 @@ export class Dashboard {
     alert('Portfolio editor coming soon!');
   }
 
-  viewPortfolio(portfolioId) {
-    // TODO: Navigate to portfolio viewer
-    console.log('View portfolio:', portfolioId);
-    alert('Portfolio viewer coming soon!');
+  async viewPortfolio(portfolioId) {
+    try {
+      // Store the portfolio ID for the preview page to use
+      sessionStorage.setItem('preview_portfolio_id', portfolioId);
+      
+      // Navigate to create page which will show preview mode
+      if (this.onNavigate) {
+        this.onNavigate('create');
+      }
+    } catch (error) {
+      console.error('Error viewing portfolio:', error);
+      alert('Failed to view portfolio. Please try again.');
+    }
   }
 }
