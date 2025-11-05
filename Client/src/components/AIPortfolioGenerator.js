@@ -21,6 +21,9 @@ export class AIPortfolioGenerator {
     this.deploymentUrl = null;
     this.customRepoName = null; // User can customize repo name before deployment
     this.isDeploying = false; // Track deployment state
+    this.showRefinementChat = false; // Track refinement chat visibility
+    this.refinementMessages = []; // Store chat messages
+    this.refinementInput = ''; // Store current input
   }
   
   async loadExistingPortfolio(portfolioId) {
@@ -168,29 +171,85 @@ export class AIPortfolioGenerator {
             </div>
           </div>
 
-          <!-- Input Content -->
-          <div class="flex-1 overflow-y-auto px-6 py-4">
-            ${this.inputMethod === 'prompt' ? `
-              <div class="bg-gray-800/80 rounded-lg p-4 border border-gray-700/50 backdrop-blur-sm">
-                <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap font-mono">${this.prompt}</p>
-              </div>
-            ` : `
-              <div class="bg-gray-800/80 rounded-lg p-4 border border-gray-700/50 backdrop-blur-sm">
-                ${this.resumeFile ? `
-                  <div class="flex items-start space-x-3">
-                    <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
-                      ${createIcon('FileText', 'w-5 h-5 text-purple-400')}
-                    </div>
-                    <div class="flex-1 min-w-0">
-                      <p class="text-sm font-medium text-white truncate">${this.resumeFile.name}</p>
-                      <p class="text-xs text-gray-400 mt-1">${(this.resumeFile.size / 1024).toFixed(1)} KB</p>
-                      <div class="flex items-center space-x-1 mt-2">
-                        ${createIcon('Check', 'w-3 h-3 text-green-400')}
-                        <span class="text-xs text-green-400">Uploaded successfully</span>
+          <!-- Input Content / Refinement Chat -->
+          <div class="flex-1 overflow-y-auto px-6 py-4 flex flex-col">
+            ${!this.showRefinementChat ? `
+              ${this.inputMethod === 'prompt' ? `
+                <div class="bg-gray-800/80 rounded-lg p-4 border border-gray-700/50 backdrop-blur-sm">
+                  <p class="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap font-mono">${this.prompt}</p>
+                </div>
+              ` : `
+                <div class="bg-gray-800/80 rounded-lg p-4 border border-gray-700/50 backdrop-blur-sm">
+                  ${this.resumeFile ? `
+                    <div class="flex items-start space-x-3">
+                      <div class="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                        ${createIcon('FileText', 'w-5 h-5 text-purple-400')}
+                      </div>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-white truncate">${this.resumeFile.name}</p>
+                        <p class="text-xs text-gray-400 mt-1">${(this.resumeFile.size / 1024).toFixed(1)} KB</p>
+                        <div class="flex items-center space-x-1 mt-2">
+                          ${createIcon('Check', 'w-3 h-3 text-green-400')}
+                          <span class="text-xs text-green-400">Uploaded successfully</span>
+                        </div>
                       </div>
                     </div>
+                  ` : ''}
+                </div>
+              `}
+            ` : `
+              <!-- Refinement Chat Interface -->
+              <div class="flex flex-col h-full">
+                <div class="flex items-center justify-between mb-3 pb-3 border-b border-gray-700">
+                  <h4 class="text-sm font-semibold text-white flex items-center space-x-2">
+                    ${createIcon('Sparkles', 'w-4 h-4 text-cyan-400')}
+                    <span>Refine with AI</span>
+                  </h4>
+                  <button
+                    id="close-refinement-chat"
+                    class="text-gray-400 hover:text-white transition-colors"
+                  >
+                    ${createIcon('X', 'w-4 h-4')}
+                  </button>
+                </div>
+                
+                <!-- Chat Messages -->
+                <div id="refinement-messages" class="flex-1 overflow-y-auto space-y-3 mb-3">
+                  ${this.refinementMessages.length === 0 ? `
+                    <div class="text-center py-8">
+                      <div class="w-12 h-12 bg-gradient-to-r from-cyan-500/20 to-blue-600/20 rounded-full flex items-center justify-center mx-auto mb-3">
+                        ${createIcon('Sparkles', 'w-6 h-6 text-cyan-400')}
+                      </div>
+                      <p class="text-sm text-gray-400">Tell me what you'd like to change</p>
+                      <p class="text-xs text-gray-500 mt-1">E.g., "Make it more colorful", "Add a skills section"</p>
+                    </div>
+                  ` : this.refinementMessages.map(msg => `
+                    <div class="flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}">
+                      <div class="max-w-[85%] ${msg.role === 'user' ? 'bg-gradient-to-r from-cyan-500 to-blue-600' : 'bg-gray-700'} rounded-lg px-3 py-2">
+                        <p class="text-xs text-white leading-relaxed">${msg.content}</p>
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+                
+                <!-- Chat Input -->
+                <div class="border-t border-gray-700 pt-3">
+                  <div class="flex items-end space-x-2">
+                    <textarea
+                      id="refinement-input"
+                      placeholder="Describe your changes..."
+                      rows="2"
+                      class="flex-1 bg-gray-900/50 border border-gray-600 rounded-lg px-3 py-2 text-white text-xs resize-none focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-transparent"
+                    >${this.refinementInput}</textarea>
+                    <button
+                      id="send-refinement"
+                      class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white px-3 py-2 rounded-lg transition-colors flex items-center justify-center"
+                      ${!this.refinementInput.trim() ? 'disabled opacity-50 cursor-not-allowed' : ''}
+                    >
+                      ${createIcon('ArrowRight', 'w-4 h-4')}
+                    </button>
                   </div>
-                ` : ''}
+                </div>
               </div>
             `}
           </div>
@@ -780,7 +839,56 @@ export class AIPortfolioGenerator {
     const refineBtn = document.getElementById('refine-btn');
     if (refineBtn) {
       refineBtn.addEventListener('click', () => {
-        this.handleRefine();
+        // Open refinement chat instead of showing prompt
+        this.showRefinementChat = true;
+        window.app.renderPage(this.render());
+        this.attachEventListeners();
+      });
+    }
+
+    // Refinement chat controls
+    const closeRefinementChat = document.getElementById('close-refinement-chat');
+    if (closeRefinementChat) {
+      closeRefinementChat.addEventListener('click', () => {
+        this.showRefinementChat = false;
+        window.app.renderPage(this.render());
+        this.attachEventListeners();
+      });
+    }
+
+    const refinementInput = document.getElementById('refinement-input');
+    if (refinementInput) {
+      refinementInput.addEventListener('input', (e) => {
+        this.refinementInput = e.target.value;
+        // Re-render to update send button state
+        const sendBtn = document.getElementById('send-refinement');
+        if (sendBtn) {
+          if (this.refinementInput.trim()) {
+            sendBtn.disabled = false;
+            sendBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+          } else {
+            sendBtn.disabled = true;
+            sendBtn.classList.add('opacity-50', 'cursor-not-allowed');
+          }
+        }
+      });
+
+      // Handle Enter key (Shift+Enter for new line, Enter to send)
+      refinementInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          const sendBtn = document.getElementById('send-refinement');
+          if (sendBtn && !sendBtn.disabled) {
+            sendBtn.click();
+          }
+        }
+      });
+    }
+
+    const sendRefinementBtn = document.getElementById('send-refinement');
+    if (sendRefinementBtn) {
+      sendRefinementBtn.addEventListener('click', () => {
+        this.handleRefinementMessage();
       });
     }
 
@@ -991,62 +1099,104 @@ export class AIPortfolioGenerator {
     }
   }
 
-  async handleRefine() {
-    const refinementPrompt = prompt(
-      'What would you like to refine in your portfolio?\n\n' +
-      'Examples:\n' +
-      '- "Make the design more modern"\n' +
-      '- "Add a contact form section"\n' +
-      '- "Change color scheme to blue and white"\n' +
-      '- "Make it more professional for corporate jobs"'
-    );
+  async handleRefinementMessage() {
+    const message = this.refinementInput.trim();
+    if (!message) return;
 
-    if (!refinementPrompt || refinementPrompt.trim() === '') {
-      return;
-    }
+    // Add user message to chat
+    this.refinementMessages.push({
+      role: 'user',
+      content: message
+    });
+
+    // Clear input
+    this.refinementInput = '';
+
+    // Update UI to show user message
+    window.app.renderPage(this.render());
+    this.attachEventListeners();
+
+    // Scroll to bottom of messages
+    setTimeout(() => {
+      const messagesContainer = document.getElementById('refinement-messages');
+      if (messagesContainer) {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }, 100);
 
     try {
-      this.isGenerating = true;
-      this.step = 'generating';
-      this.generationProgress = 0;
-      this.generationMessage = 'initialize';
+      // Add loading message
+      this.refinementMessages.push({
+        role: 'assistant',
+        content: 'Refining your portfolio...'
+      });
       window.app.renderPage(this.render());
       this.attachEventListeners();
 
-      // Simulate progress
-      this.simulateProgress();
-
       // Refine portfolio
       const response = await apiService.post(`/ai/portfolio/refine/${this.portfolioId}`, {
-        request: refinementPrompt,
-        conversationHistory: []
+        request: message,
+        conversationHistory: this.refinementMessages.slice(0, -1).map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }))
       });
 
+      // Remove loading message
+      this.refinementMessages.pop();
+
       if (response.success) {
-        this.generationProgress = 100;
+        // Update portfolio
         this.portfolioData = response.portfolio.data;
         this.portfolioHtml = response.portfolio.html;
-        // Keep the same portfolio ID since we're updating
 
-        // Move back to preview
+        // Add success message
+        this.refinementMessages.push({
+          role: 'assistant',
+          content: '✅ Portfolio updated! Check the preview on the right.'
+        });
+
+        // Update UI and reload preview
+        window.app.renderPage(this.render());
+        this.attachEventListeners();
+        this.loadPreview();
+
+        // Scroll to bottom
         setTimeout(() => {
-          this.isGenerating = false;
-          this.step = 'preview';
-          window.app.renderPage(this.render());
-          this.attachEventListeners();
-          this.loadPreview();
-        }, 1000);
+          const messagesContainer = document.getElementById('refinement-messages');
+          if (messagesContainer) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        }, 100);
       } else {
         throw new Error(response.message || 'Failed to refine portfolio');
       }
 
     } catch (error) {
       console.error('Refinement error:', error);
-      this.isGenerating = false;
-      this.step = 'preview';
+      
+      // Remove loading message if exists
+      if (this.refinementMessages.length > 0 && 
+          this.refinementMessages[this.refinementMessages.length - 1].content === 'Refining your portfolio...') {
+        this.refinementMessages.pop();
+      }
+
+      // Add error message
+      this.refinementMessages.push({
+        role: 'assistant',
+        content: `❌ Sorry, refinement failed: ${error.message}`
+      });
+
       window.app.renderPage(this.render());
       this.attachEventListeners();
-      notifications.error(`Failed to refine portfolio: ${error.message}`);
+
+      // Scroll to bottom
+      setTimeout(() => {
+        const messagesContainer = document.getElementById('refinement-messages');
+        if (messagesContainer) {
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      }, 100);
     }
   }
 

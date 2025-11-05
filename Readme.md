@@ -2,7 +2,9 @@
 
 SkillSlate is an AI-powered Portfolio-as-a-Service. Users create and deploy professional, responsive portfolios from a short prompt or their resume, optionally link GitHub to auto-import projects and derive skills, and publish to a global CDN with one click.
 
-This README is the single source of truth for the SaaS direction. Legacy script-only instructions have been removed.
+<div align="center">
+  <img src="./Demo/images/Screenshot 2025-11-06 005802.png" alt="Portfolio-as-a-Service Preview" width="800"/>
+</div>
 
 ---
 

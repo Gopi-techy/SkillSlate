@@ -184,7 +184,15 @@ export class Dashboard {
             <div class="flex justify-between items-center">
               <div>
                 <h3 class="font-semibold text-white text-lg">${portfolio.name}</h3>
-                <p class="text-sm text-gray-400 capitalize">${portfolio.template} template</p>
+                <p class="text-sm text-gray-400">
+                  ${portfolio.createdAt ? new Date(portfolio.createdAt).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  }) : 'Recently created'}
+                </p>
                 <div class="flex items-center space-x-4 mt-3">
                   <span class="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium ${
                     portfolio.status === 'deployed' 
