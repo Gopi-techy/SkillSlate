@@ -132,12 +132,12 @@ class Portfolio:
         return collection.count_documents({'userId': ObjectId(user_id)})
     
     @staticmethod
-    def to_dict(portfolio_doc):
+    def to_dict(portfolio_doc, include_html=False):
         """Convert portfolio document to dictionary"""
         if not portfolio_doc:
             return None
         
-        return {
+        result = {
             'id': str(portfolio_doc['_id']),
             'userId': str(portfolio_doc['userId']),
             'name': portfolio_doc['name'],
@@ -150,3 +150,11 @@ class Portfolio:
             'lastDeployed': portfolio_doc.get('lastDeployed', '').isoformat() if portfolio_doc.get('lastDeployed') else None,
             'settings': portfolio_doc.get('settings', {})
         }
+        
+        # Include HTML content if requested
+        if include_html:
+            result['html'] = portfolio_doc.get('html')
+            result['content'] = portfolio_doc.get('content')
+            result['data'] = portfolio_doc.get('data')
+        
+        return result

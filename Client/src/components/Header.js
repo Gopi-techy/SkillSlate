@@ -2,17 +2,35 @@ import { createIcon } from '../utils/icons.js';
 import { createLogo } from '../utils/logo.js';
 import { apiService } from '../utils/api.js';
 
+// Static flag to track if GitHub status has been checked globally
+let githubStatusChecked = false;
+let isCheckingGithub = false;
+
 export class Header {
   constructor(user, onAuth, onNavigate) {
+    console.log('🏗️ Header constructor called');
     this.user = user;
     this.onAuth = onAuth;
     this.onNavigate = onNavigate;
     this.isMenuOpen = false;
-    this.checkGithubStatus();
+    
+    // Only check GitHub status once per app session
+    if (!githubStatusChecked && !isCheckingGithub && this.user) {
+      console.log('🔍 Checking GitHub status...');
+      this.checkGithubStatus();
+    } else {
+      console.log('⏭️ Skipping GitHub status check (already checked or in progress)');
+    }
   }
 
   async checkGithubStatus() {
+    // Prevent multiple concurrent calls
+    if (isCheckingGithub || githubStatusChecked) {
+      return;
+    }
+    
     if (this.user) {
+      isCheckingGithub = true;
       try {
         const response = await apiService.getGithubStatus();
         // Only set githubData if we got a successful response
@@ -25,13 +43,23 @@ export class Header {
           this.user.githubData = null;
           this.updateGithubStatus(null);
         }
+        githubStatusChecked = true; // Mark as checked globally
       } catch (error) {
         console.warn('Failed to fetch GitHub status:', error);
         // Clear GitHub data on error
         this.user.githubData = null;
         this.updateGithubStatus(null);
+        githubStatusChecked = true; // Mark as checked even on error
+      } finally {
+        isCheckingGithub = false;
       }
     }
+  }
+
+  // Method to reset GitHub status check (useful after OAuth callback)
+  static resetGithubStatus() {
+    githubStatusChecked = false;
+    isCheckingGithub = false;
   }
 
   updateGithubStatus(githubData) {

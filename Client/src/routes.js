@@ -200,6 +200,31 @@ export function setupRoutes(app) {
     });
     console.log('✅ Added create portfolio route with AI generation');
 
+    // Portfolio Preview route
+    router.addRoute('preview/:id', async (params) => {
+        console.log('👁️ Rendering portfolio preview for ID:', params.id);
+        
+        if (!app.user) {
+            router.navigate('login');
+            return '';
+        }
+
+        const { PortfolioPreview } = await import('./components/PortfolioPreview.js');
+        const portfolioPreview = new PortfolioPreview(
+            app.user,
+            params.id,
+            (route) => router.navigate(route)
+        );
+        
+        window.portfolioPreviewComponent = portfolioPreview;
+        
+        // Load the portfolio data
+        await portfolioPreview.loadPortfolio();
+        
+        return portfolioPreview.render();
+    });
+    console.log('✅ Added portfolio preview route');
+
     // Templates route removed
 
     // GitHub OAuth Callback
@@ -279,6 +304,10 @@ export function setupRoutes(app) {
                 await app.apiService.linkGithub(access_token);
                 console.log('✅ GitHub linked successfully');
                 
+                // Reset GitHub status check so it fetches fresh data
+                const { Header } = await import('./components/Header.js');
+                Header.resetGithubStatus();
+                
                 const profileResponse = await app.apiService.getProfile();
                 if (!profileResponse.user) throw new Error('Could not update user profile');
                 
@@ -296,6 +325,10 @@ export function setupRoutes(app) {
                 app.apiService.setToken(apiToken);
                 
                 await app.apiService.linkGithub(access_token);
+                
+                // Reset GitHub status check so it fetches fresh data
+                const { Header } = await import('./components/Header.js');
+                Header.resetGithubStatus();
                 
                 const profileResponse = await app.apiService.getProfile();
                 if (!profileResponse.user) throw new Error('Failed to get user profile');

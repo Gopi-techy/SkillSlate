@@ -151,9 +151,15 @@ export class SkillSlateApp {
       </div>
     `;
 
+    // Clear any pending event listener attachment timers
+    if (this.attachListenersTimer) {
+      clearTimeout(this.attachListenersTimer);
+    }
+
     // Attach event listeners after a short delay to ensure DOM is ready
-    setTimeout(() => {
+    this.attachListenersTimer = setTimeout(() => {
       this.attachEventListeners();
+      this.attachListenersTimer = null;
     }, 10);
   }
 
@@ -201,6 +207,8 @@ export class SkillSlateApp {
       window.dashboardComponent.attachEventListeners();
     } else if (currentRoute === 'create' && window.createPortfolioComponent) {
       window.createPortfolioComponent.attachEventListeners();
+    } else if (currentRoute.startsWith('preview/') && window.portfolioPreviewComponent) {
+      window.portfolioPreviewComponent.attachEventListeners();
     } else if (currentRoute === 'templates' && window.templatesPageComponent) {
       window.templatesPageComponent.attachEventListeners();
     } else if (currentRoute === '404' && window.notFoundPageComponent) {

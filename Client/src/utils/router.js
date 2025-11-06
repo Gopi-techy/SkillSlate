@@ -22,6 +22,9 @@ export class Router {
         
         console.log(`🚀 Navigating to: ${path}`);
         
+        // Scroll to top when navigating
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        
         // Prevent navigation loops
         if (this.isNavigating) {
             console.warn('Navigation already in progress, ignoring:', path);
@@ -42,13 +45,13 @@ export class Router {
         // Update URL
         this.updateURL(cleanPath);
         
-        // Find and execute route handler
-        const handler = this.routes.get(cleanPath);
+        // Find and execute route handler (support parameters)
+        const { handler, params } = this.matchRoute(cleanPath);
         if (handler) {
             this.currentRoute = cleanPath;
-            console.log(`✅ Route found: ${cleanPath}`);
+            console.log(`✅ Route found: ${cleanPath}`, params ? `with params: ${JSON.stringify(params)}` : '');
             try {
-                const content = handler();
+                const content = handler(params);
                 
                 // Handle both async and sync route handlers
                 if (content instanceof Promise) {
@@ -103,6 +106,33 @@ export class Router {
             this.isNavigating = false;
             return this.handleNotFound(cleanPath);
         }
+    }
+
+    // Match route with parameters
+    matchRoute(path) {
+        // Try exact match first
+        if (this.routes.has(path)) {
+            return { handler: this.routes.get(path), params: null };
+        }
+
+        // Try pattern matching for routes with parameters
+        for (const [pattern, handler] of this.routes.entries()) {
+            if (pattern.includes(':')) {
+                const regex = new RegExp('^' + pattern.replace(/:[^/]+/g, '([^/]+)') + '$');
+                const match = path.match(regex);
+                if (match) {
+                    // Extract parameter names and values
+                    const paramNames = pattern.match(/:[^/]+/g)?.map(p => p.slice(1)) || [];
+                    const params = {};
+                    paramNames.forEach((name, index) => {
+                        params[name] = match[index + 1];
+                    });
+                    return { handler, params };
+                }
+            }
+        }
+
+        return { handler: null, params: null };
     }
 
     // Clean path

@@ -1,5 +1,6 @@
 import { createIcon } from '../utils/icons.js';
 import { apiService } from '../utils/api.js';
+import { notifications } from '../utils/notifications.js';
 
 export class Dashboard {
   constructor(user, onAuth, onNavigate) {
@@ -121,19 +122,16 @@ export class Dashboard {
             </div>
           </button>
           <button
-            ${isAtLimit ? 'disabled' : 'data-nav="create"'}
-            class="${isAtLimit ? 
-              'bg-gradient-to-r from-gray-600 to-gray-700 text-gray-400 cursor-not-allowed p-8 rounded-2xl flex items-center space-x-4' : 
-              'bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 text-white p-8 rounded-2xl transition-all transform hover:scale-105 flex items-center space-x-4 card-hover'
-            }"
+            id="template-btn"
+            class="bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-400 hover:to-pink-500 text-white p-8 rounded-2xl transition-all transform hover:scale-105 flex items-center space-x-4 card-hover"
           >
             <div class="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
-              ${isAtLimit ? createIcon('X', 'w-6 h-6') : createIcon('Palette', 'w-6 h-6')}
+              ${createIcon('Palette', 'w-6 h-6')}
             </div>
             <div class="text-left">
-              <div class="font-semibold text-lg">${isAtLimit ? 'Portfolio Limit Reached' : 'Create from Template'}</div>
-              <div class="text-sm ${isAtLimit ? 'text-gray-500' : 'text-purple-100'}">
-                ${isAtLimit ? 'Delete a portfolio to create new one' : 'Modern, Creative, Minimal'}
+              <div class="font-semibold text-lg">Create from Template</div>
+              <div class="text-sm text-purple-100">
+                Modern, Creative, Minimal
               </div>
             </div>
           </button>
@@ -435,8 +433,16 @@ export class Dashboard {
           }
         } catch (error) {
           console.error('Failed to start GitHub connection:', error);
-          alert('Failed to connect to GitHub. Please try again.');
+          notifications.error('Failed to connect to GitHub. Please try again.');
         }
+      });
+    }
+
+    // Template button - coming soon
+    const templateBtn = document.getElementById('template-btn');
+    if (templateBtn) {
+      templateBtn.addEventListener('click', () => {
+        notifications.info('🎨 Template library feature coming soon! We\'re working on beautiful pre-designed templates for you.', 4000);
       });
     }
   }
@@ -444,56 +450,73 @@ export class Dashboard {
   // Portfolio management methods
   async deployPortfolio(portfolioId) {
     try {
+      notifications.showLoading('Deploying portfolio...');
       const response = await apiService.deployPortfolio(portfolioId);
+      notifications.hideLoading();
+      
       if (response.success) {
-        alert(`Portfolio deployed successfully! URL: ${response.url}`);
+        notifications.success(`Portfolio deployed successfully!`);
         await this.loadPortfolios(); // Refresh the list
+        window.app.renderPage(this.render());
       } else {
-        alert(`Failed to deploy portfolio: ${response.message}`);
+        notifications.error(`Failed to deploy portfolio: ${response.message}`);
       }
     } catch (error) {
       console.error('Error deploying portfolio:', error);
-      alert('Failed to deploy portfolio. Please try again.');
+      notifications.hideLoading();
+      notifications.error('Failed to deploy portfolio. Please try again.');
     }
   }
 
   async deletePortfolio(portfolioId) {
-    if (!confirm('Are you sure you want to delete this portfolio? This action cannot be undone.')) {
+    const confirmed = await notifications.confirm(
+      'This action cannot be undone. All portfolio data will be permanently deleted.',
+      {
+        title: 'Delete Portfolio?',
+        confirmText: 'Delete',
+        cancelText: 'Cancel',
+        type: 'danger'
+      }
+    );
+
+    if (!confirmed) {
       return;
     }
 
     try {
+      notifications.showLoading('Deleting portfolio...');
       const response = await apiService.deletePortfolio(portfolioId);
+      notifications.hideLoading();
+      
       if (response.success) {
-        alert('Portfolio deleted successfully!');
+        notifications.success('Portfolio deleted successfully!');
         await this.loadPortfolios(); // Refresh the list
+        window.app.renderPage(this.render());
       } else {
-        alert(`Failed to delete portfolio: ${response.message}`);
+        notifications.error(`Failed to delete portfolio: ${response.message}`);
       }
     } catch (error) {
       console.error('Error deleting portfolio:', error);
-      alert('Failed to delete portfolio. Please try again.');
+      notifications.hideLoading();
+      notifications.error('Failed to delete portfolio. Please try again.');
     }
   }
 
   editPortfolio(portfolioId) {
-    // TODO: Navigate to portfolio editor
-    console.log('Edit portfolio:', portfolioId);
-    alert('Portfolio editor coming soon!');
+    notifications.info('🚀 Portfolio editor feature coming soon!', 3000);
   }
 
   async viewPortfolio(portfolioId) {
     try {
-      // Store the portfolio ID for the preview page to use
-      sessionStorage.setItem('preview_portfolio_id', portfolioId);
+      console.log('👁️ Navigating to preview for portfolio:', portfolioId);
       
-      // Navigate to create page which will show preview mode
+      // Navigate to the dedicated preview route
       if (this.onNavigate) {
-        this.onNavigate('create');
+        this.onNavigate(`preview/${portfolioId}`);
       }
     } catch (error) {
       console.error('Error viewing portfolio:', error);
-      alert('Failed to view portfolio. Please try again.');
+      notifications.error('Failed to view portfolio. Please try again.');
     }
   }
 }

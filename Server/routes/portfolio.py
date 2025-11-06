@@ -103,7 +103,7 @@ def get_portfolio(current_user, portfolio_id):
         
         return jsonify({
             'success': True,
-            'portfolio': Portfolio.to_dict(portfolio)
+            'portfolio': Portfolio.to_dict(portfolio, include_html=True)
         })
         
     except Exception as e:

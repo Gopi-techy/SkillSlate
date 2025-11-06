@@ -186,7 +186,13 @@ def generate_portfolio_from_resume(resume_text: str, template: str = "modern") -
         print(f"📦 Parsing JSON response (length: {len(content)} chars)...")
         portfolio_data = json.loads(content)
         
+        # Log what keys we got
+        print(f"📋 Portfolio data keys: {list(portfolio_data.keys())}")
+        
         if not _validate_portfolio_structure(portfolio_data):
+            print(f"❌ Validation failed. Expected keys: ['personalInfo', 'bio', 'skills', 'projects']")
+            print(f"❌ Got keys: {list(portfolio_data.keys())}")
+            print(f"📄 Full response (first 500 chars): {json.dumps(portfolio_data, indent=2)[:500]}")
             raise ValueError("Invalid portfolio structure returned by AI")
         
         print(f"✅ Portfolio data validated successfully")
@@ -318,9 +324,14 @@ def generate_html_from_data(portfolio_data: Dict, template: str = "modern") -> s
 
 
 def _validate_portfolio_structure(data: Dict) -> bool:
-    """Validate portfolio data structure"""
-    required_keys = ['personalInfo', 'bio', 'skills', 'projects']
-    return all(key in data for key in required_keys)
+    """Validate portfolio data structure - accept flexible formats"""
+    # Check for essential keys - either old format or new format
+    has_personal_info = 'personalInfo' in data or ('name' in data and 'contactInfo' in data)
+    has_bio = 'bio' in data
+    has_skills = 'skills' in data
+    has_projects = 'projects' in data
+    
+    return has_personal_info and has_bio and has_skills and has_projects
 
 
 def _clean_html_response(html: str) -> str:

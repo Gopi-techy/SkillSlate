@@ -164,8 +164,6 @@ export class AIPortfolioGenerator {
                   id="back-to-input"
                   class="text-xs text-gray-400 hover:text-white transition-colors flex items-center space-x-1 px-3 py-1.5 rounded-md hover:bg-gray-800"
                 >
-                  ${createIcon('ArrowLeft', 'w-3 h-3')}
-                  <span>Edit</span>
                 </button>
               ` : ''}
             </div>
@@ -435,7 +433,7 @@ export class AIPortfolioGenerator {
 
         <div 
           id="resume-drop-zone"
-          class="border-2 border-dashed border-gray-600 rounded-xl p-6 text-center bg-gray-800/30 hover:border-purple-500 transition-all duration-300 cursor-pointer mb-5"
+          class="border-2 border-dashed border-gray-600 rounded-xl p-6 text-center bg-gray-800/30 hover:border-purple-500 transition-all duration-300 mb-5"
         >
           ${this.resumeFile ? `
             <div class="space-y-2">
@@ -729,6 +727,11 @@ export class AIPortfolioGenerator {
   }
 
   attachEventListeners() {
+    // Debug: Track how many times this is called
+    if (!window._attachListenerCallCount) window._attachListenerCallCount = 0;
+    window._attachListenerCallCount++;
+    console.log(`🔧 attachEventListeners called (count: ${window._attachListenerCallCount})`);
+    
     // Load preview if we're in preview mode
     if (this.step === 'preview' && this.portfolioHtml) {
       console.log('🎬 attachEventListeners called in preview mode, loading preview');
@@ -743,7 +746,6 @@ export class AIPortfolioGenerator {
         this.step = 'input';
         this.render();
         window.app.renderPage(this.render());
-        this.attachEventListeners();
       });
     }
 
@@ -752,8 +754,7 @@ export class AIPortfolioGenerator {
       button.addEventListener('click', () => {
         this.inputMethod = button.getAttribute('data-input-method');
         window.app.renderPage(this.render());
-        this.attachEventListeners();
-      });
+      }, { once: true });
     });
 
 
@@ -777,16 +778,26 @@ export class AIPortfolioGenerator {
     const removeBtn = document.getElementById('remove-resume');
 
     if (browseBtn && resumeFileInput) {
-      browseBtn.addEventListener('click', () => {
+      console.log('📎 Setting up resume upload button');
+      
+      // Use once: true to prevent multiple file pickers
+      browseBtn.addEventListener('click', (e) => {
+        console.log('🖱️ Browse button clicked!');
+        e.preventDefault();
+        e.stopPropagation();
         resumeFileInput.click();
-      });
+      }, { once: true });
 
       resumeFileInput.addEventListener('change', (e) => {
+        console.log('📄 File input changed');
         const file = e.target.files[0];
         if (file) {
+          console.log('✅ File selected:', file.name);
           this.handleResumeFile(file);
         }
-      });
+        // Clear the input so the same file can be selected again if needed
+        e.target.value = '';
+      }, { once: true });
     }
 
     if (resumeDropZone) {
@@ -810,11 +821,12 @@ export class AIPortfolioGenerator {
     }
 
     if (removeBtn) {
-      removeBtn.addEventListener('click', () => {
+      removeBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
         this.resumeFile = null;
         window.app.renderPage(this.render());
-        this.attachEventListeners();
-      });
+      }, { once: true });
     }
 
     // Generate button
@@ -822,7 +834,7 @@ export class AIPortfolioGenerator {
     if (generateBtn && !generateBtn.disabled) {
       generateBtn.addEventListener('click', () => {
         this.handleGenerate();
-      });
+      }, { once: true }); // Prevent multiple clicks
     }
 
     // Back to input button
@@ -831,7 +843,6 @@ export class AIPortfolioGenerator {
       backToInputBtn.addEventListener('click', () => {
         this.step = 'input';
         window.app.renderPage(this.render());
-        this.attachEventListeners();
       });
     }
 
@@ -842,7 +853,6 @@ export class AIPortfolioGenerator {
         // Open refinement chat instead of showing prompt
         this.showRefinementChat = true;
         window.app.renderPage(this.render());
-        this.attachEventListeners();
       });
     }
 
@@ -852,7 +862,6 @@ export class AIPortfolioGenerator {
       closeRefinementChat.addEventListener('click', () => {
         this.showRefinementChat = false;
         window.app.renderPage(this.render());
-        this.attachEventListeners();
       });
     }
 
@@ -934,7 +943,6 @@ export class AIPortfolioGenerator {
         this.resetState();
         this.step = 'input';
         window.app.renderPage(this.render());
-        this.attachEventListeners();
       });
     }
 
@@ -989,16 +997,21 @@ export class AIPortfolioGenerator {
 
     this.resumeFile = file;
     window.app.renderPage(this.render());
-    this.attachEventListeners();
+    // Don't call attachEventListeners() here - renderPage already does it
   }
 
   async handleGenerate() {
+    // Prevent multiple simultaneous generations
+    if (this.isGenerating) {
+      console.warn('⚠️ Generation already in progress, ignoring duplicate request');
+      return;
+    }
+
     try {
       this.isGenerating = true;
       this.step = 'generating';
       this.generationProgress = 0;
       window.app.renderPage(this.render());
-      this.attachEventListeners();
 
       // Estimate time
       const estimateResponse = await apiService.post('/ai/portfolio/estimate-time', {
@@ -1035,7 +1048,6 @@ export class AIPortfolioGenerator {
           this.isGenerating = false;
           this.step = 'preview';
           window.app.renderPage(this.render());
-          this.attachEventListeners();
           this.loadPreview();
         }, 1000);
       } else {
@@ -1047,7 +1059,6 @@ export class AIPortfolioGenerator {
       this.isGenerating = false;
       this.step = 'input';
       window.app.renderPage(this.render());
-      this.attachEventListeners();
       notifications.error(`Failed to generate portfolio: ${error.message}`);
     }
   }
@@ -1070,7 +1081,6 @@ export class AIPortfolioGenerator {
         this.generationProgress = stage.progress;
         this.generationMessage = stage.message;
         window.app.renderPage(this.render());
-        this.attachEventListeners();
 
         currentIndex++;
         setTimeout(updateProgress, stage.duration);
@@ -1085,17 +1095,28 @@ export class AIPortfolioGenerator {
     console.log('🖼️ Loading preview:', {
       iframeFound: !!iframe,
       hasHtml: !!this.portfolioHtml,
-      htmlLength: this.portfolioHtml?.length
+      htmlLength: this.portfolioHtml?.length,
+      step: this.step
     });
     
     if (iframe && this.portfolioHtml) {
-      iframe.srcdoc = this.portfolioHtml;
-      console.log('✅ Preview loaded into iframe');
+      // Small delay to ensure iframe is fully ready
+      setTimeout(() => {
+        iframe.srcdoc = this.portfolioHtml;
+        console.log('✅ Preview loaded into iframe');
+      }, 50);
     } else {
       console.warn('⚠️ Cannot load preview:', {
         noIframe: !iframe,
-        noHtml: !this.portfolioHtml
+        noHtml: !this.portfolioHtml,
+        step: this.step
       });
+      
+      // If iframe not found but we have HTML, retry after DOM updates
+      if (!iframe && this.portfolioHtml && this.step === 'preview') {
+        console.log('🔄 Retrying loadPreview after delay...');
+        setTimeout(() => this.loadPreview(), 100);
+      }
     }
   }
 
@@ -1114,7 +1135,6 @@ export class AIPortfolioGenerator {
 
     // Update UI to show user message
     window.app.renderPage(this.render());
-    this.attachEventListeners();
 
     // Scroll to bottom of messages
     setTimeout(() => {
@@ -1131,7 +1151,6 @@ export class AIPortfolioGenerator {
         content: 'Refining your portfolio...'
       });
       window.app.renderPage(this.render());
-      this.attachEventListeners();
 
       // Refine portfolio
       const response = await apiService.post(`/ai/portfolio/refine/${this.portfolioId}`, {
@@ -1158,7 +1177,6 @@ export class AIPortfolioGenerator {
 
         // Update UI and reload preview
         window.app.renderPage(this.render());
-        this.attachEventListeners();
         this.loadPreview();
 
         // Scroll to bottom
@@ -1188,7 +1206,6 @@ export class AIPortfolioGenerator {
       });
 
       window.app.renderPage(this.render());
-      this.attachEventListeners();
 
       // Scroll to bottom
       setTimeout(() => {
@@ -1225,7 +1242,6 @@ export class AIPortfolioGenerator {
         if (!confirmed) {
           this.step = 'preview';
           window.app.renderPage(this.render());
-          this.attachEventListeners();
           return;
         }
         
@@ -1262,7 +1278,6 @@ export class AIPortfolioGenerator {
         notifications.error('Repository name cannot be empty');
         this.step = 'preview';
         window.app.renderPage(this.render());
-        this.attachEventListeners();
         return;
       }
       
@@ -1270,7 +1285,6 @@ export class AIPortfolioGenerator {
         notifications.error('Repository name is too long (max 100 characters)');
         this.step = 'preview';
         window.app.renderPage(this.render());
-        this.attachEventListeners();
         return;
       }
       
@@ -1321,7 +1335,6 @@ export class AIPortfolioGenerator {
       this.step = 'complete';
       this.deploymentUrl = deployResponse.url;
       window.app.renderPage(this.render());
-      this.attachEventListeners();
       
       // Don't auto-navigate - let user see the success page and deployment URL
       
